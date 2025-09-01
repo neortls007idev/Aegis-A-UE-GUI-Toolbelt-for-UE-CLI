@@ -3,6 +3,7 @@ import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QGuiApplication
+
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -18,6 +19,9 @@ from aegis.core.task_runner import TaskRunner
 
 
 LAYOUT_VERSION = 2
+
+
+LAYOUT_VERSION = 1
 
 
 class MainWindow(QMainWindow):
@@ -221,6 +225,16 @@ class MainWindow(QMainWindow):
         )
         if path:
             try:
+    def _set_theme(self, mode: str) -> None:
+        settings.set_theme_mode(mode)
+        self._apply_theme()
+
+    def _create_custom_theme(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select .qss theme", "", "QSS (*.qss)"
+        )
+        if path:
+            try:
                 settings.set_theme_mode("custom")
                 settings.set_custom_theme_path(path)
                 self._apply_theme()
@@ -251,6 +265,10 @@ class MainWindow(QMainWindow):
                 scheme = QGuiApplication.styleHints().colorScheme()
                 fname = "dark.qss" if scheme == Qt.ColorScheme.Dark else "light.qss"
                 with open(theme_dir / fname, "r", encoding="utf-8") as f:
+                    self.setStyleSheet(f.read())
+            elif mode in ("light", "dark"):
+                with open(theme_dir / f"{mode}.qss", "r", encoding="utf-8") as f:
+                    self.setStyleSheet(f.read())
                     self.setStyleSheet(f.read())
             elif mode in ("light", "dark"):
                 with open(theme_dir / f"{mode}.qss", "r", encoding="utf-8") as f:
