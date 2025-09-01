@@ -15,6 +15,9 @@ from aegis.core.task_runner import TaskRunner
 import sys
 
 
+LAYOUT_VERSION = 1
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -39,22 +42,12 @@ class MainWindow(QMainWindow):
         self.logDock.setObjectName("dock_live_log")
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
 
-        # Dock: Command Preview
-        self.preview = QTextEdit("Command Preview (stub)")
-        self.preview.setReadOnly(True)
-        self.previewDock = QDockWidget("Command Preview")
-        self.previewDock.setWidget(self.preview)
-        self.previewDock.setObjectName("dock_preview")
-        self.addDockWidget(Qt.RightDockWidgetArea, self.previewDock)
-
         # Dock: Artifacts
         self.artifacts = QTextEdit("Artifacts (stub)")
         self.artDock = QDockWidget("Artifacts")
         self.artDock.setWidget(self.artifacts)
         self.artDock.setObjectName("dock_artifacts")
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
-        self.tabifyDockWidget(self.previewDock, self.artDock)
-        self.previewDock.raise_()
 
         self.runner = TaskRunner()
         self._build_menu()
@@ -125,11 +118,7 @@ class MainWindow(QMainWindow):
 
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.previewDock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
-        self.tabifyDockWidget(self.previewDock, self.artDock)
-        self.previewDock.raise_()
-
     def _echo_test(self):
         argv = [sys.executable, "-c", "print('Aegis OK')"]
         self._log("[echo] Starting…", "info")
@@ -166,6 +155,10 @@ class MainWindow(QMainWindow):
         g = settings.load_geometry()
         if g:
             self.restoreGeometry(g)
+        if settings.layout_version() != LAYOUT_VERSION:
+            self._reset_layout()
+            settings.set_layout_version(LAYOUT_VERSION)
+            return
         s = settings.load_state()
         if s:
             self.restoreState(s)

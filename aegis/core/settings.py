@@ -40,5 +40,11 @@ class Settings:
         v = self.s.value("ui/state", None)
         return QByteArray(v) if v is not None else None
 
+    def layout_version(self) -> int:
+        return self.s.value("ui/layout_version", 0, type=int)
+
+    def set_layout_version(self, version: int) -> None:
+        self.s.setValue("ui/layout_version", version)
+
 
 settings = Settings()
