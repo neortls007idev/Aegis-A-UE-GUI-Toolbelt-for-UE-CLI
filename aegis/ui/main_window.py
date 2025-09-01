@@ -1,4 +1,9 @@
 from pathlib import Path
+import sys
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QGuiApplication
+
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -7,12 +12,13 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTextEdit,
 )
-from PySide6.QtGui import QAction, QGuiApplication
-from PySide6.QtCore import Qt
 
+from aegis.core.profile import Profile
 from aegis.core.settings import settings
 from aegis.core.task_runner import TaskRunner
-import sys
+
+
+LAYOUT_VERSION = 2
 
 
 LAYOUT_VERSION = 1
@@ -49,10 +55,21 @@ class MainWindow(QMainWindow):
         self.artDock.setObjectName("dock_artifacts")
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
 
+        # Dock: EnvDoc
+        from aegis.ui.widgets.env_doc import EnvDocPanel
+
+        self.env_doc = EnvDocPanel()
+        self.env_dock = QDockWidget("EnvDoc")
+        self.env_dock.setWidget(self.env_doc)
+        self.env_dock.setObjectName("dock_env_doc")
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.env_dock)
+
         self.runner = TaskRunner()
+        self.profile: Profile | None = None
         self._build_menu()
         self._apply_saved_layout()
         self._apply_saved_theme()
+        self._load_last_profile()
         QGuiApplication.styleHints().colorSchemeChanged.connect(
             self._on_system_theme_change
         )
@@ -78,6 +95,17 @@ class MainWindow(QMainWindow):
         act_echo = QAction("Echo Test Command", self)
         tools_menu.addAction(act_echo)
         act_echo.triggered.connect(self._echo_test)
+
+        profile_menu = self.menuBar().addMenu("&Profile")
+        act_new_profile = QAction("New", self)
+        profile_menu.addAction(act_new_profile)
+        act_new_profile.triggered.connect(self._new_profile)
+        act_open_profile = QAction("Open…", self)
+        profile_menu.addAction(act_open_profile)
+        act_open_profile.triggered.connect(self._open_profile)
+        act_save_profile = QAction("Save", self)
+        profile_menu.addAction(act_save_profile)
+        act_save_profile.triggered.connect(self._save_profile)
 
         settings_menu = self.menuBar().addMenu("&Settings")
         theme_menu = settings_menu.addMenu("Load Theme…")
@@ -119,6 +147,8 @@ class MainWindow(QMainWindow):
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.env_dock)
+
     def _echo_test(self):
         argv = [sys.executable, "-c", "print('Aegis OK')"]
         self._log("[echo] Starting…", "info")
@@ -134,6 +164,67 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
+    def _new_profile(self) -> None:
+        engine = QFileDialog.getExistingDirectory(self, "Select Engine Root")
+        if not engine:
+            return
+        project = QFileDialog.getExistingDirectory(self, "Select Project Directory")
+        if not project:
+            return
+        self.profile = Profile(Path(engine), Path(project))
+        self._save_profile_as()
+
+    def _open_profile(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Open Profile", "", "JSON (*.json)")
+        if path:
+            try:
+                self.profile = Profile.load(Path(path))
+                settings.set_profile_path(path)
+            except Exception as e:
+                QMessageBox.critical(self, "Open Error", str(e))
+
+    def _save_profile(self) -> None:
+        if not getattr(self, "profile", None):
+            QMessageBox.information(self, "No Profile", "No profile to save.")
+            return
+        path = settings.profile_path()
+        if path:
+            try:
+                self.profile.save(Path(path))
+            except Exception as e:
+                QMessageBox.critical(self, "Save Error", str(e))
+        else:
+            self._save_profile_as()
+
+    def _save_profile_as(self) -> None:
+        if not getattr(self, "profile", None):
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save Profile", "", "JSON (*.json)")
+        if path:
+            try:
+                self.profile.save(Path(path))
+                settings.set_profile_path(path)
+            except Exception as e:
+                QMessageBox.critical(self, "Save Error", str(e))
+
+    def _load_last_profile(self) -> None:
+        path = settings.profile_path()
+        if path and Path(path).exists():
+            try:
+                self.profile = Profile.load(Path(path))
+            except Exception:
+                self.profile = None
+
+    def _set_theme(self, mode: str) -> None:
+        settings.set_theme_mode(mode)
+        self._apply_theme()
+
+    def _create_custom_theme(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select .qss theme", "", "QSS (*.qss)"
+        )
+        if path:
+            try:
     def _set_theme(self, mode: str) -> None:
         settings.set_theme_mode(mode)
         self._apply_theme()
@@ -174,6 +265,10 @@ class MainWindow(QMainWindow):
                 scheme = QGuiApplication.styleHints().colorScheme()
                 fname = "dark.qss" if scheme == Qt.ColorScheme.Dark else "light.qss"
                 with open(theme_dir / fname, "r", encoding="utf-8") as f:
+                    self.setStyleSheet(f.read())
+            elif mode in ("light", "dark"):
+                with open(theme_dir / f"{mode}.qss", "r", encoding="utf-8") as f:
+                    self.setStyleSheet(f.read())
                     self.setStyleSheet(f.read())
             elif mode in ("light", "dark"):
                 with open(theme_dir / f"{mode}.qss", "r", encoding="utf-8") as f:

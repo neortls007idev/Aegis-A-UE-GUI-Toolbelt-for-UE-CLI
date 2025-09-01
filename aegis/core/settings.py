@@ -45,6 +45,16 @@ class Settings:
 
     def set_layout_version(self, version: int) -> None:
         self.s.setValue("ui/layout_version", version)
+        
+    # profile
+    def profile_path(self) -> str | None:
+        return self.s.value("profile/path", None, type=str)
+
+    def set_profile_path(self, path: str | None) -> None:
+        if path is None:
+            self.s.remove("profile/path")
+        else:
+            self.s.setValue("profile/path", path)
 
 
 settings = Settings()
