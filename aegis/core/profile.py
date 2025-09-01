@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import json
+
+
+@dataclass
+class Profile:
+    """Paths describing an Unreal project profile."""
+
+    engine_root: Path
+    project_dir: Path
+
+    def save(self, path: Path) -> None:
+        data = {
+            "engine_root": str(self.engine_root),
+            "project_dir": str(self.project_dir),
+        }
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Path) -> Profile:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cls(
+            engine_root=Path(data["engine_root"]),
+            project_dir=Path(data["project_dir"]),
+        )
