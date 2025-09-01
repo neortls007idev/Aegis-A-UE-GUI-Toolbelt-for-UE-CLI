@@ -56,5 +56,4 @@ class Settings:
         else:
             self.s.setValue("profile/path", path)
 
-
 settings = Settings()
