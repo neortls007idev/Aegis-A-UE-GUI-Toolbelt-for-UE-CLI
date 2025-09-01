@@ -219,13 +219,14 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self, "Select .qss theme", "", "QSS (*.qss)"
         )
-        if path:
-            try:
-                settings.set_theme_mode("custom")
-                settings.set_custom_theme_path(path)
-                self._apply_theme()
-            except Exception as e:
-                QMessageBox.critical(self, "Theme Error", str(e))
+        if not path:
+            return
+        try:
+            settings.set_theme_mode("custom")
+            settings.set_custom_theme_path(path)
+            self._apply_theme()
+        except Exception as e:
+            QMessageBox.critical(self, "Theme Error", str(e))
 
     # ----- Persistence -----
     def _apply_saved_layout(self):
