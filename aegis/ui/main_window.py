@@ -119,7 +119,6 @@ class MainWindow(QMainWindow):
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
-
     def _echo_test(self):
         argv = [sys.executable, "-c", "print('Aegis OK')"]
         self._log("[echo] Starting…", "info")
