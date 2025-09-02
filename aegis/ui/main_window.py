@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QTabWidget,
     QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from aegis.core.profile import Profile
@@ -17,9 +19,11 @@ from aegis.core.settings import settings
 from aegis.core.task_runner import TaskRunner
 from aegis.ui.widgets.profile_editor import ProfileEditor
 from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
+from aegis.ui.widgets.env_doc import EnvDocPanel
+from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 
 
-LAYOUT_VERSION = 2
+LAYOUT_VERSION = 3
 
 
 class MainWindow(QMainWindow):
@@ -30,13 +34,20 @@ class MainWindow(QMainWindow):
 
         # Center tabs (page stubs)
         self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
+        self.tabs.addTab(EnvDocPanel(), "EnvDoc")
         self.tabs.addTab(QTextEdit("Build (stub)"), "Build")
         self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
         self.tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
         self.tabs.addTab(QTextEdit("Devices / UAFT (stub)"), "Devices / UAFT")
         self.tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
         self.tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
+
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        self.info_bar = ProfileInfoBar()
+        central_layout.addWidget(self.info_bar)
+        central_layout.addWidget(self.tabs)
+        self.setCentralWidget(central)
 
         # Dock: Live Log
         self.log = QTextEdit()
@@ -53,15 +64,6 @@ class MainWindow(QMainWindow):
         self.artDock.setObjectName("dock_artifacts")
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
 
-        # Dock: EnvDoc
-        from aegis.ui.widgets.env_doc import EnvDocPanel
-
-        self.env_doc = EnvDocPanel()
-        self.env_dock = QDockWidget("EnvDoc")
-        self.env_dock.setWidget(self.env_doc)
-        self.env_dock.setObjectName("dock_env_doc")
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.env_dock)
-
         self.runner = TaskRunner()
         self.profile: Profile | None = None
         self.actions: dict[str, QAction] = {}
@@ -70,6 +72,7 @@ class MainWindow(QMainWindow):
         self._apply_saved_layout()
         self._apply_saved_theme()
         self._load_last_profile()
+        self.info_bar.update(self.profile, settings.profile_path())
         QGuiApplication.styleHints().colorSchemeChanged.connect(
             self._on_system_theme_change
         )
@@ -140,6 +143,9 @@ class MainWindow(QMainWindow):
         act_export_keys = QAction("Export…", self)
         kb_menu.addAction(act_export_keys)
         act_export_keys.triggered.connect(self._export_key_bindings)
+        act_reset_keys = QAction("Reset to Defaults", self)
+        kb_menu.addAction(act_reset_keys)
+        act_reset_keys.triggered.connect(self._reset_key_bindings)
 
         help_menu = self.menuBar().addMenu("&Help")
         act_about = QAction("About", self)
@@ -161,7 +167,7 @@ class MainWindow(QMainWindow):
         dlg = KeyBindingsEditor(settings.key_bindings.all(), self)
         if dlg.exec():
             for action, seq in dlg.get_bindings().items():
-                settings.key_bindings.set(action, seq or None)
+                settings.key_bindings.set(action, seq)
             self._apply_key_bindings()
 
     def _import_key_bindings(self) -> None:
@@ -185,6 +191,10 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
 
+    def _reset_key_bindings(self) -> None:
+        settings.key_bindings.reset()
+        self._apply_key_bindings()
+
     # ----- Actions -----
     def _new_window(self):
         # launch a new process of this app
@@ -199,7 +209,6 @@ class MainWindow(QMainWindow):
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.env_dock)
 
     def _echo_test(self):
         argv = [sys.executable, "-c", "print('Aegis OK')"]
@@ -230,6 +239,7 @@ class MainWindow(QMainWindow):
                 self.profile = Profile.load(Path(path))
                 settings.set_profile_path(path)
                 self._apply_profile_title()
+                self.info_bar.update(self.profile, settings.profile_path())
             except Exception as e:
                 QMessageBox.critical(self, "Open Error", str(e))
 
@@ -261,6 +271,7 @@ class MainWindow(QMainWindow):
                 self.profile.save(Path(path))
                 settings.set_profile_path(path)
                 self._log(f"[profile] Saved to {path}", "success")
+                self.info_bar.update(self.profile, settings.profile_path())
             except Exception as e:
                 QMessageBox.critical(self, "Save Error", str(e))
 
@@ -272,6 +283,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 self.profile = None
         self._apply_profile_title()
+        self.info_bar.update(self.profile, settings.profile_path())
 
     def _set_theme(self, mode: str) -> None:
         settings.set_theme_mode(mode)

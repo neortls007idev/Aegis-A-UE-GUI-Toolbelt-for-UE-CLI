@@ -38,15 +38,32 @@ class KeyBindings:
         )
 
     def set(self, action: str, sequence: str | None) -> None:
-        """Assign *sequence* to *action*, ensuring uniqueness."""
-        if not sequence:
+        """Assign *sequence* to *action*, ensuring uniqueness.
+
+        ``None`` reverts to the default binding, while an empty string
+        explicitly clears the shortcut.
+        """
+        if sequence == "":
+            # Explicit unbind
+            self.settings.setValue(f"{self.prefix}{action}", "")
+            return
+        if sequence is None or sequence == DEFAULT_KEY_BINDINGS.get(action, ""):
+            # Revert to default
             self.settings.remove(f"{self.prefix}{action}")
             return
-        # Remove duplicate from other actions
+        # Remove duplicate from other actions (including defaults)
         for other in DEFAULT_KEY_BINDINGS:
             if other != action and self.get(other) == sequence:
-                self.settings.remove(f"{self.prefix}{other}")
+                self.settings.setValue(f"{self.prefix}{other}", "")
         self.settings.setValue(f"{self.prefix}{action}", sequence)
+
+    def assign(self, action: str, sequence: str) -> None:
+        """Convenience wrapper to assign *sequence* to *action*."""
+        self.set(action, sequence)
+
+    def clear(self, action: str) -> None:
+        """Explicitly remove any binding from *action*."""
+        self.set(action, "")
 
     def all(self) -> Dict[str, str]:
         bindings = DEFAULT_KEY_BINDINGS.copy()
@@ -70,3 +87,9 @@ class KeyBindings:
         for action, seq in data.items():
             if action in DEFAULT_KEY_BINDINGS:
                 self.set(action, seq)
+
+    def reset(self) -> None:
+        """Remove all custom key bindings, restoring defaults."""
+        self.settings.beginGroup("keybindings")
+        self.settings.remove("")
+        self.settings.endGroup()
