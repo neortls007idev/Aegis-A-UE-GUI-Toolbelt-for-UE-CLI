@@ -44,8 +44,17 @@ class EnvDocPanel(QWidget):
         self.sdk_path: Path | None = None
 
         layout = QVBoxLayout(self)
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Component", "Path", "Status", "Actions"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(
+            [
+                "Component",
+                "Path",
+                "Version",
+                "Status",
+                "Test",
+                "Actions",
+            ]
+        )
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
@@ -53,9 +62,15 @@ class EnvDocPanel(QWidget):
         self.test_button.clicked.connect(self._test_sdk)
         layout.addWidget(self.test_button)
 
+        self.test_compat_button = QPushButton("Test SDK (Engine Compatibility)")
+        self.test_compat_button.clicked.connect(lambda: self._test_sdk(True))
+        layout.addWidget(self.test_compat_button)
+
         self.fix_button = QPushButton("Fix Env")
         self.fix_button.clicked.connect(self._fix_env)
         layout.addWidget(self.fix_button)
+
+        self.component_paths: dict[str, Path | None] = {}
 
     # ----- Profile -----
     def update_profile(self, profile: Optional[Profile]) -> None:
@@ -63,8 +78,46 @@ class EnvDocPanel(QWidget):
         self._run_checks()
 
     # ----- Checks -----
+    def _detect_version(self, component: str, path: Path) -> tuple[str, QColor | None]:
+        """Return version string and optional color for warning."""
+        try:
+            if component in {"Android SDK", "Android NDK"}:
+                prop = path / "source.properties"
+                if prop.exists():
+                    for line in prop.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("Pkg.Revision="):
+                            return line.split("=", 1)[1].strip(), None
+            elif component == "JDK":
+                rel = path / "release"
+                if rel.exists():
+                    for line in rel.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("JAVA_VERSION="):
+                            return line.split("=", 1)[1].strip().strip('"'), None
+            elif component == "Vulkan SDK":
+                ver_file = path / "version.txt"
+                if ver_file.exists():
+                    return ver_file.read_text(encoding="utf-8").strip(), None
+        except Exception:  # pragma: no cover - best effort
+            pass
+        return "Version Unknown", QColor("#c80")
+
+    def _version_from_cmd(self, argv: list[str]) -> str | None:
+        try:
+            out = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            first = out.stdout.splitlines()
+            return first[0].strip() if first else None
+        except Exception:  # pragma: no cover - external tool
+            return None
+
     def _run_checks(self) -> None:
         self.table.setRowCount(0)
+        self.component_paths = {}
         if not self.profile:
             return
 
@@ -125,24 +178,34 @@ class EnvDocPanel(QWidget):
             path = next((p for p in candidates if p.exists()), default)
             if name == "Android SDK":
                 self.sdk_path = path
+            self.component_paths[name] = path
             self.table.insertRow(row)
             display = f"{name} (optional)" if name in optional_required else name
             self.table.setItem(row, 0, QTableWidgetItem(display))
             self.table.setItem(row, 1, QTableWidgetItem(str(path)))
+            version_item = QTableWidgetItem("")
             if path.is_dir():
-                item = QTableWidgetItem("Found")
-                item.setForeground(QColor("#0a0"))
+                ver, color = self._detect_version(name, path)
+                version_item.setText(ver)
+                if color:
+                    version_item.setForeground(color)
+                status_item = QTableWidgetItem("Found")
+                status_item.setForeground(QColor("#0a0"))
             elif path.exists():
-                item = QTableWidgetItem("Mismatch")
-                item.setForeground(QColor("#c80"))
+                status_item = QTableWidgetItem("Mismatch")
+                status_item.setForeground(QColor("#c80"))
             else:
-                item = QTableWidgetItem("Missing")
+                status_item = QTableWidgetItem("Missing")
                 color = "#c80" if name in optional_required else "#a00"
-                item.setForeground(QColor(color))
-            self.table.setItem(row, 2, item)
+                status_item.setForeground(QColor(color))
+            self.table.setItem(row, 2, version_item)
+            self.table.setItem(row, 3, status_item)
+            test_btn = QPushButton("Test")
+            test_btn.clicked.connect(lambda _, comp=name: self._test_component(comp))
+            self.table.setCellWidget(row, 4, test_btn)
             fix_btn = QPushButton("Fix")
             fix_btn.clicked.connect(lambda _, comp=name: self._fix_component(comp))
-            self.table.setCellWidget(row, 3, fix_btn)
+            self.table.setCellWidget(row, 5, fix_btn)
             row += 1
 
         optional_tools = {
@@ -154,9 +217,10 @@ class EnvDocPanel(QWidget):
         }
         for name, exe in optional_tools.items():
             path_str = shutil.which(exe) or ""
-            display_path = path_str
             status = "Missing"
             ok = False
+            version = ""
+            ver_color: QColor | None = None
             if path_str:
                 ok = True
                 if name == ".NET SDK":
@@ -171,18 +235,40 @@ class EnvDocPanel(QWidget):
                         versions = [
                             ln.split()[0] for ln in out.stdout.splitlines() if ln
                         ]
-                        ok = any(3 <= int(v.split(".")[0]) <= 8 for v in versions)
+                        ok = any(3 <= int(v.split(".")[0]) <= 9 for v in versions)
                         if versions:
-                            display_path = versions[0]
+                            version = versions[0]
+                        else:
+                            version = "Version Unknown"
+                            ver_color = QColor("#c80")
                     except Exception:  # pragma: no cover - external tool
-                        pass
+                        version = "Version Unknown"
+                        ver_color = QColor("#c80")
+                elif name in {"CMake", "Clang-Format"}:
+                    v = self._version_from_cmd([exe, "--version"])
+                    if v:
+                        version = v
+                    else:
+                        version = "Version Unknown"
+                        ver_color = QColor("#c80")
+                else:
+                    version = "Version Unknown"
+                    ver_color = QColor("#c80")
                 status = "Found" if ok else "Missing"
             self.table.insertRow(row)
             self.table.setItem(row, 0, QTableWidgetItem(f"{name} (optional)"))
-            self.table.setItem(row, 1, QTableWidgetItem(display_path))
+            self.table.setItem(row, 1, QTableWidgetItem(path_str))
+            ver_item = QTableWidgetItem(version)
+            if ver_color:
+                ver_item.setForeground(ver_color)
+            self.table.setItem(row, 2, ver_item)
             item = QTableWidgetItem(status)
             item.setForeground(QColor("#0a0" if ok else "#c80"))
-            self.table.setItem(row, 2, item)
+            self.table.setItem(row, 3, item)
+            self.component_paths[name] = Path(path_str) if path_str else None
+            test_btn = QPushButton("Test")
+            test_btn.clicked.connect(lambda _, comp=name: self._test_component(comp))
+            self.table.setCellWidget(row, 4, test_btn)
             row += 1
 
     # ----- Fix -----
@@ -213,7 +299,7 @@ class EnvDocPanel(QWidget):
             return
         self._run_scripts(selected)
 
-    def _test_sdk(self) -> None:
+    def _test_sdk(self, engine_compat: bool = False) -> None:
         if not (self.profile and self.sdk_path):
             self.log("[env] No SDK path", "error")
             return
@@ -223,32 +309,73 @@ class EnvDocPanel(QWidget):
             return
         cfg = configparser.ConfigParser()
         cfg.read(cfg_path)
-        sec = "/Script/AndroidRuntimeSettings.AndroidRuntimeSettings"
-        if not cfg.has_section(sec):
+        section = next(
+            (s for s in cfg.sections() if s.endswith("AndroidRuntimeSettings")),
+            None,
+        )
+        if not section:
             self.log("[env] AndroidRuntimeSettings section missing", "error")
             return
-        settings = cfg[sec]
+        settings = cfg[section]
         min_sdk = settings.get("MinSDKVersion")
         target_sdk = settings.get("TargetSDKVersion")
         platforms = self.sdk_path / "platforms"
-        if min_sdk:
-            p = platforms / f"android-{min_sdk}"
-            if p.exists():
-                self.log(f"[env] MinSDK {min_sdk} OK", "success")
-            else:
-                self.log(f"[env] Missing platform android-{min_sdk}", "warning")
-        if target_sdk and target_sdk != min_sdk:
-            p = platforms / f"android-{target_sdk}"
-            if p.exists():
-                self.log(f"[env] TargetSDK {target_sdk} OK", "success")
-            else:
-                self.log(f"[env] Missing platform android-{target_sdk}", "warning")
+        installed = (
+            sorted(
+                int(p.name.split("-")[1])
+                for p in platforms.iterdir()
+                if p.name.startswith("android-")
+            )
+            if platforms.exists()
+            else []
+        )
+        if engine_compat:
+            highest = max(installed) if installed else 0
+            if min_sdk:
+                if int(min_sdk) > highest:
+                    self.log(
+                        f"[env] Installed SDK {highest} < MinSDK {min_sdk}",
+                        "warning",
+                    )
+                else:
+                    self.log(f"[env] MinSDK {min_sdk} OK", "success")
+            if target_sdk and target_sdk != min_sdk:
+                if int(target_sdk) > highest:
+                    self.log(
+                        f"[env] Installed SDK {highest} < TargetSDK {target_sdk}",
+                        "warning",
+                    )
+                else:
+                    self.log(f"[env] TargetSDK {target_sdk} OK", "success")
+        else:
+            if min_sdk:
+                p = platforms / f"android-{min_sdk}"
+                if p.exists():
+                    self.log(f"[env] MinSDK {min_sdk} OK", "success")
+                else:
+                    self.log(f"[env] Missing platform android-{min_sdk}", "warning")
+            if target_sdk and target_sdk != min_sdk:
+                p = platforms / f"android-{target_sdk}"
+                if p.exists():
+                    self.log(f"[env] TargetSDK {target_sdk} OK", "success")
+                else:
+                    self.log(f"[env] Missing platform android-{target_sdk}", "warning")
         ndk_dir = self.sdk_path / "ndk"
         if not ndk_dir.exists() or not any(ndk_dir.iterdir()):
             self.log("[env] NDK missing", "warning")
         build_tools = self.sdk_path / "build-tools"
         if not build_tools.exists() or not any(build_tools.iterdir()):
             self.log("[env] Build-tools missing", "warning")
+
+    def _test_component(self, component: str) -> None:
+        path = self.component_paths.get(component)
+        if component == "Android SDK":
+            self._test_sdk()
+            return
+        if path and path.exists():
+            self.log(f"[env] {component} OK", "success")
+        else:
+            self.log(f"[env] {component} missing", "warning")
 
     def _collect_scripts(self) -> dict[str, Path]:
         assert self.profile

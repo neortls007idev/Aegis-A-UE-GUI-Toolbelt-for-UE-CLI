@@ -153,7 +153,7 @@ class UaftPanel(QWidget):
         box_conn.setLayout(lc)
         root.addWidget(box_conn)
 
-        box_args = QGroupBox("Trace Arguments")
+        box_args = QGroupBox("Command Line Arguments/Trace Arguments")
         la = QVBoxLayout()
         la.addWidget(self.trace_args)
         la.addWidget(self.btn_write_cmd)
