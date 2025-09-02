@@ -1,6 +1,7 @@
 from PySide6.QtCore import QByteArray, QSettings
 
 from aegis.core.key_bindings import KeyBindings
+from aegis.core.log_colors import LogColors
 
 ORG = "Aegis"
 APP = "AegisToolbelt"
@@ -10,6 +11,7 @@ class Settings:
     def __init__(self) -> None:
         self.s = QSettings(ORG, APP)
         self.key_bindings = KeyBindings(self.s)
+        self.log_colors = LogColors(self.s)
 
     # theme
     def theme_mode(self) -> str:

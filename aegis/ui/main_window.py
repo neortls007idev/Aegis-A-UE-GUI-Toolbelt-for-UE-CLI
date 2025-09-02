@@ -12,6 +12,12 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QHBoxLayout,
+    QPushButton,
+    QProgressBar,
+    QStatusBar,
+    QLineEdit,
+    QComboBox,
 )
 
 from aegis.core.profile import Profile
@@ -22,6 +28,7 @@ from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
 from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 from aegis.ui.widgets.uaft_panel import UaftPanel
+from aegis.ui.widgets.log_colors_editor import LogColorsEditor
 
 
 LAYOUT_VERSION = 3
@@ -35,6 +42,8 @@ class MainWindow(QMainWindow):
 
         # Runner
         self.runner = TaskRunner()
+        self.runner.started.connect(self._task_started)
+        self.runner.finished.connect(lambda _code: self._task_finished())
 
         # Center tabs
         self.tabs = QTabWidget()
@@ -55,11 +64,41 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.tabs)
         self.setCentralWidget(central)
 
+        # Status bar with progress and cancel button
+        self.status = QStatusBar()
+        self.setStatusBar(self.status)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        self.progress.setVisible(False)
+        self.cancel_tasks = QPushButton("Cancel All Tasks")
+        self.cancel_tasks.setVisible(False)
+        self.cancel_tasks.clicked.connect(self.runner.cancel)
+        self.status.addPermanentWidget(self.progress)
+        self.status.addPermanentWidget(self.cancel_tasks)
+
         # Dock: Live Log
         self.log = QTextEdit()
         self.log.setReadOnly(True)
+        self.log_messages: list[tuple[str, str]] = []
+        self.log_colors = settings.log_colors
+        self.log_search = QLineEdit()
+        self.log_search.setPlaceholderText("Search…")
+        self.log_search.textChanged.connect(self._refresh_log_view)
+        self.log_filter = QComboBox()
+        self.log_filter.addItems(["All", "Info", "Warning", "Error", "Success"])
+        self.log_filter.currentTextChanged.connect(self._refresh_log_view)
+        self.log_clear = QPushButton("Clear")
+        self.log_clear.clicked.connect(self._clear_log)
+        log_container = QWidget()
+        log_layout = QVBoxLayout(log_container)
+        row = QHBoxLayout()
+        row.addWidget(self.log_search, 1)
+        row.addWidget(self.log_filter)
+        row.addWidget(self.log_clear)
+        log_layout.addLayout(row)
+        log_layout.addWidget(self.log)
         self.logDock = QDockWidget("Live Log")
-        self.logDock.setWidget(self.log)
+        self.logDock.setWidget(log_container)
         self.logDock.setObjectName("dock_live_log")
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
 
@@ -137,6 +176,24 @@ class MainWindow(QMainWindow):
         theme_menu.addAction(act_custom)
         act_custom.triggered.connect(self._create_custom_theme)
 
+        log_menu = settings_menu.addMenu("Log Colors")
+        act_edit_log = QAction("Edit…", self)
+        log_menu.addAction(act_edit_log)
+        act_edit_log.triggered.connect(self._edit_log_colors)
+        self.actions["settings.log_colors.edit"] = act_edit_log
+        act_import_log = QAction("Import…", self)
+        log_menu.addAction(act_import_log)
+        act_import_log.triggered.connect(self._import_log_colors)
+        self.actions["settings.log_colors.import"] = act_import_log
+        act_export_log = QAction("Export…", self)
+        log_menu.addAction(act_export_log)
+        act_export_log.triggered.connect(self._export_log_colors)
+        self.actions["settings.log_colors.export"] = act_export_log
+        act_reset_log = QAction("Reset to Defaults", self)
+        log_menu.addAction(act_reset_log)
+        act_reset_log.triggered.connect(self._reset_log_colors)
+        self.actions["settings.log_colors.reset"] = act_reset_log
+
         kb_menu = settings_menu.addMenu("Key Bindings")
         act_edit_keys = QAction("Edit…", self)
         kb_menu.addAction(act_edit_keys)
@@ -173,6 +230,41 @@ class MainWindow(QMainWindow):
             for action, seq in dlg.get_bindings().items():
                 settings.key_bindings.set(action, seq)
             self._apply_key_bindings()
+
+    def _edit_log_colors(self) -> None:
+        cfg = self.log_colors.all()
+        dlg = LogColorsEditor(cfg["levels"], self.log_colors.regex_rules(), self)
+        if dlg.exec():
+            levels, regex = dlg.get_config()
+            for lvl, col in levels.items():
+                self.log_colors.set_level_color(lvl, col)
+            self.log_colors.set_regex_rules(regex)
+            self._refresh_log_view()
+
+    def _import_log_colors(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Log Colors", "", "JSON (*.json)"
+        )
+        if path:
+            try:
+                self.log_colors.import_json(path)
+                self._refresh_log_view()
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", str(e))
+
+    def _export_log_colors(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Log Colors", "", "JSON (*.json)"
+        )
+        if path:
+            try:
+                self.log_colors.export_json(path)
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", str(e))
+
+    def _reset_log_colors(self) -> None:
+        self.log_colors.reset()
+        self._refresh_log_view()
 
     def _import_key_bindings(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -344,10 +436,17 @@ class MainWindow(QMainWindow):
             self._apply_theme("system")
 
     def _apply_profile_title(self) -> None:
+        base = "Aegis - A UE GUI Toolbelt for UE CLI"
         if self.profile:
-            self.setWindowTitle(self.profile.display_name())
+            nick = self.profile.nickname.strip()
+            proj = self.profile.project_dir.name
+            parts = [base]
+            if nick:
+                parts.append(nick)
+            parts.append(proj)
+            self.setWindowTitle(" - ".join(parts))
         else:
-            self.setWindowTitle("Aegis Toolbelt")
+            self.setWindowTitle(base)
 
     def _profile_changed(self) -> None:
         self._apply_profile_title()
@@ -356,14 +455,36 @@ class MainWindow(QMainWindow):
         self.uaft_panel.update_profile(self.profile)
 
     def _log(self, message: str, level: str = "info") -> None:
-        colors = {
-            "info": "#888",
-            "warning": "#cc0",
-            "error": "#b00",
-            "success": "#0a0",
-        }
-        color = colors.get(level, "#888")
-        self.log.append(f"<span style='color:{color};'>{message}</span>")
+        self.log_messages.append((message, level))
+        if self._log_matches_filters(message, level):
+            color = self.log_colors.color_for(message, level)
+            self.log.append(f"<span style='color:{color};'>{message}</span>")
+
+    def _clear_log(self) -> None:
+        self.log.clear()
+        self.log_messages.clear()
+
+    def _log_matches_filters(self, message: str, level: str) -> bool:
+        level_filter = self.log_filter.currentText().lower()
+        if level_filter != "all" and level != level_filter:
+            return False
+        query = self.log_search.text().lower()
+        return query in message.lower()
+
+    def _refresh_log_view(self) -> None:
+        self.log.clear()
+        for message, level in self.log_messages:
+            if self._log_matches_filters(message, level):
+                color = self.log_colors.color_for(message, level)
+                self.log.append(f"<span style='color:{color};'>{message}</span>")
+
+    def _task_started(self) -> None:
+        self.progress.setVisible(True)
+        self.cancel_tasks.setVisible(True)
+
+    def _task_finished(self) -> None:
+        self.progress.setVisible(False)
+        self.cancel_tasks.setVisible(False)
 
     def closeEvent(self, ev):
         settings.save_geometry(self.saveGeometry())
