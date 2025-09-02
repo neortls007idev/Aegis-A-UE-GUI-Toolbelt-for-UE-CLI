@@ -12,11 +12,11 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QLineEdit,
-    QInputDialog,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -104,7 +104,8 @@ class UaftPanel(QWidget):
         self.trace_list = QListWidget()
         self.trace_list.setSelectionMode(QListWidget.SingleSelection)
         self.trace_list.setMinimumHeight(160)
-        self.pull_dir = QLineEdit(str(Path.home() / "UnrealTraces"))
+        self.pull_dir = QLineEdit()
+        self.pull_base: Path | None = None
         self.btn_choose_dir = QPushButton("Choose Folder…")
         self.btn_pull = QPushButton("Pull Selected Trace")
         self.chk_open_insights = QCheckBox("Open in Unreal Insights after pull")
@@ -177,6 +178,7 @@ class UaftPanel(QWidget):
         )
         box_traces.setLayout(lt)
         root.addWidget(box_traces)
+
         root.addStretch(1)
 
     def _row(self, widgets: list[QWidget]) -> QHBoxLayout:
@@ -202,6 +204,7 @@ class UaftPanel(QWidget):
         self._scan()
         self._apply_project_prefix()
         self._load_security_token()
+        self._apply_pull_base()
 
     def _apply_project_prefix(self) -> None:
         if not self.profile:
@@ -211,24 +214,26 @@ class UaftPanel(QWidget):
         prefix = f"../../../{proj}/{proj}.uproject "
         self.trace_args.setPlainText(prefix + DEFAULT_TRACE_ARGS)
 
+    def _apply_pull_base(self) -> None:
+        if self.profile:
+            self.pull_base = self.profile.project_dir / "UEInsights"
+        else:
+            self.pull_base = Path.home() / "UEInsights"
+        self.pull_dir.setText(str(self.pull_base))
+
     def _load_security_token(self) -> None:
         self.security_token.clear()
-        if not self.profile:
+        if not self.uaft:
             return
-        cfg = self.profile.project_dir / "Config" / "DefaultGame.ini"
-        if not cfg.exists():
-            return
-        for line in cfg.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("SecurityToken="):
-                token = line.split("=", 1)[1].strip()
-                if token:
-                    self.security_token.setText(token)
-                break
+        token = self.uaft.security_token()
+        if token:
+            self.security_token.setText(token)
 
     def _scan(self) -> None:
         self.uaft_path = None
         self.insights_path = None
+        if self.uaft:
+            self.uaft.stop()
         self.uaft = None
         if not self.profile:
             self.uaft_label.setText("UAFT: (no profile)")
@@ -245,7 +250,11 @@ class UaftPanel(QWidget):
         if not self.insights_path:
             self.insights_path = next(engine_root.rglob("UnrealInsights"), None)
 
-        self.uaft = Uaft(self.uaft_path) if self.uaft_path else None
+        self.uaft = (
+            Uaft(self.uaft_path, project_dir=self.profile.project_dir)
+            if self.uaft_path
+            else None
+        )
         self.uaft_label.setText(
             f"UAFT: {self.uaft_path}" if self.uaft_path else "UAFT: (not found)"
         )
@@ -320,6 +329,7 @@ class UaftPanel(QWidget):
         if devs:
             self.device_table.selectRow(0)
             self.serial.setText(devs[0])
+            self._device_selected()
         self.log(f"[uaft] found {len(devs)} device(s)", "info")
 
     def _device_selected(self) -> None:
@@ -327,6 +337,10 @@ class UaftPanel(QWidget):
         if row >= 0:
             serial = self.device_table.item(row, 2).text()
             self.serial.setText(serial)
+            make = self.device_table.item(row, 0).text()
+            model = self.device_table.item(row, 1).text()
+            if self.pull_base:
+                self.pull_dir.setText(str(self.pull_base / f"{make}{model}"))
 
     def _list_packages(self) -> None:
         uaft = self._require_uaft()
