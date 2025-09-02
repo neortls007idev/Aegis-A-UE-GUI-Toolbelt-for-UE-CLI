@@ -32,6 +32,10 @@ class Uaft:
     def _config_path(self) -> Path | None:
         if not self.project_dir:
             return None
+        for folder in ("Config", "Configs"):
+            cfg = self.project_dir / folder / "DefaultEngine.ini"
+            if cfg.exists():
+                return cfg
         return self.project_dir / "Config" / "DefaultEngine.ini"
 
     def _read_token(self) -> str | None:

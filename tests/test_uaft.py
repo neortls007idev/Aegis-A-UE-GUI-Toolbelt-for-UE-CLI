@@ -42,3 +42,11 @@ SecurityToken=Key=ZZZ
     uaft = Uaft(Path("uaft"), project_dir=tmp_path)
     assert uaft.security_token() == "ZZZ"
     uaft.stop()
+
+
+def test_security_token_configs_dir(tmp_path: Path) -> None:
+    ini = tmp_path / "Configs" / "DefaultEngine.ini"
+    make_ini(ini, "CCC")
+    uaft = Uaft(Path("uaft"), project_dir=tmp_path)
+    assert uaft.security_token() == "CCC"
+    uaft.stop()

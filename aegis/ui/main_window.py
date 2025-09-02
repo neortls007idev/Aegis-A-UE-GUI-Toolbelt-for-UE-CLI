@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import subprocess
+from datetime import datetime
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
@@ -82,7 +83,7 @@ class MainWindow(QMainWindow):
         # Dock: Live Log
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        self.log_messages: list[tuple[str, str]] = []
+        self.log_messages: list[tuple[str, str, str]] = []
         self.log_colors = settings.log_colors
         self.log_search = QLineEdit()
         self.log_search.setPlaceholderText("Search…")
@@ -107,6 +108,8 @@ class MainWindow(QMainWindow):
         self.logDock.setFeatures(
             QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetClosable
         )
+        self.logDock.setAllowedAreas(Qt.BottomDockWidgetArea)
+        self.logDock.setMinimumHeight(120)
         self.logDock.hide()
 
         # Dock: Artifacts
@@ -115,6 +118,8 @@ class MainWindow(QMainWindow):
         self.artDock.setWidget(self.artifacts)
         self.artDock.setObjectName("dock_artifacts")
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
+        self.artDock.setAllowedAreas(Qt.RightDockWidgetArea)
+        self.artDock.setMinimumWidth(120)
 
         self.profile: Profile | None = None
         self.actions: dict[str, QAction] = {}
@@ -149,6 +154,9 @@ class MainWindow(QMainWindow):
         act_echo = QAction("Echo Test Command", self)
         tools_menu.addAction(act_echo)
         act_echo.triggered.connect(self._echo_test)
+        act_logcat = QAction("Logcat Viewer", self)
+        tools_menu.addAction(act_logcat)
+        act_logcat.triggered.connect(self._open_logcat)
 
         profile_menu = self.menuBar().addMenu("&Profile")
         act_new_profile = QAction("New", self)
@@ -381,6 +389,20 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
+    def _open_logcat(self) -> None:
+        try:
+            subprocess.Popen(
+                ["studio", "logcat"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to launch Android Studio Logcat: {e}",
+            )
+
     def _new_profile(self) -> None:
         dlg = ProfileEditor(parent=self)
         if dlg.exec():
@@ -515,12 +537,13 @@ class MainWindow(QMainWindow):
         self.uaft_panel.update_profile(self.profile)
 
     def _log(self, message: str, level: str = "info") -> None:
-        self.log_messages.append((message, level))
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.log_messages.append((ts, message, level))
         if not self.logDock.isVisible():
             self.logDock.show()
         if self._log_matches_filters(message, level):
             color = self.log_colors.color_for(message, level)
-            self.log.append(f"<span style='color:{color};'>{message}</span>")
+            self.log.append(f"<span style='color:{color};'>{ts} {message}</span>")
 
     def _clear_log(self) -> None:
         self.log.clear()
@@ -535,10 +558,10 @@ class MainWindow(QMainWindow):
 
     def _refresh_log_view(self) -> None:
         self.log.clear()
-        for message, level in self.log_messages:
+        for ts, message, level in self.log_messages:
             if self._log_matches_filters(message, level):
                 color = self.log_colors.color_for(message, level)
-                self.log.append(f"<span style='color:{color};'>{message}</span>")
+                self.log.append(f"<span style='color:{color};'>{ts} {message}</span>")
 
     def _task_started(self) -> None:
         self.progress.setVisible(True)

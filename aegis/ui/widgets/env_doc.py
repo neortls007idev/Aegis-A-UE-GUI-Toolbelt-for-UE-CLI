@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
 import configparser
+import difflib
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import urllib.request
 from pathlib import Path
-import shutil
-import subprocess
+from typing import Callable, Optional
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
+from aegis.core.ini_parser import parse_ini
 from .env_fix_dialog import EnvFixDialog
 
 
@@ -214,6 +216,7 @@ class EnvDocPanel(QWidget):
             ".NET SDK": "dotnet",
             "VS Build Tools": "msbuild",
             "Clang-Format": "clang-format",
+            "ADB": "adb",
         }
         for name, exe in optional_tools.items():
             path_str = shutil.which(exe) or ""
@@ -246,6 +249,13 @@ class EnvDocPanel(QWidget):
                         ver_color = QColor("#c80")
                 elif name in {"CMake", "Clang-Format"}:
                     v = self._version_from_cmd([exe, "--version"])
+                    if v:
+                        version = v
+                    else:
+                        version = "Version Unknown"
+                        ver_color = QColor("#c80")
+                elif name == "ADB":
+                    v = self._version_from_cmd([exe, "version"])
                     if v:
                         version = v
                     else:
@@ -299,73 +309,170 @@ class EnvDocPanel(QWidget):
             return
         self._run_scripts(selected)
 
+    def _find_platforms_dir(self) -> Path | None:
+        if not self.sdk_path:
+            return None
+        direct = self.sdk_path / "platforms"
+        if direct.exists():
+            return direct
+        for p in self.sdk_path.rglob("platforms"):
+            parts = [s.lower() for s in p.parts[-3:]]
+            if parts[-1] == "platforms" and "sdk" in parts:
+                return p
+        return None
+
     def _test_sdk(self, engine_compat: bool = False) -> None:
         if not (self.profile and self.sdk_path):
             self.log("[env] No SDK path", "error")
             return
-        cfg_path = self.profile.project_dir / "Config" / "DefaultEngine.ini"
-        if not cfg_path.exists():
+        cfg_path = None
+        for folder in ("Config", "Configs"):
+            p = self.profile.project_dir / folder / "DefaultEngine.ini"
+            if p.exists():
+                cfg_path = p
+                break
+        if not cfg_path:
             self.log("[env] DefaultEngine.ini not found", "error")
             return
-        cfg = configparser.ConfigParser()
-        cfg.read(cfg_path)
-        section = next(
-            (s for s in cfg.sections() if s.endswith("AndroidRuntimeSettings")),
-            None,
-        )
-        if not section:
-            self.log("[env] AndroidRuntimeSettings section missing", "error")
-            return
-        settings = cfg[section]
-        min_sdk = settings.get("MinSDKVersion")
-        target_sdk = settings.get("TargetSDKVersion")
-        platforms = self.sdk_path / "platforms"
-        installed = (
-            sorted(
+        data = parse_ini(cfg_path)
+        section = data.get("/Script/AndroidRuntimeSettings.AndroidRuntimeSettings", {})
+        min_sdk = section.get("MinSDKVersion")
+        target_sdk = section.get("TargetSDKVersion")
+        sdk_override = section.get("SDKAPILevelOverride")
+        ndk_override = section.get("NDKAPILevelOverride")
+        build_tools_req = section.get("BuildToolsVersion")
+        platforms = self._find_platforms_dir()
+        installed: list[int] = []
+        if platforms and platforms.exists():
+            installed = sorted(
                 int(p.name.split("-")[1])
                 for p in platforms.iterdir()
                 if p.name.startswith("android-")
             )
-            if platforms.exists()
-            else []
-        )
+        else:
+            self.log("[env] Android SDK platforms not found", "warning")
+        highest = max(installed) if installed else 0
+        bt_dir = self.sdk_path / "build-tools"
+        bt_versions = []
+        if bt_dir.exists():
+            bt_versions = [p.name for p in bt_dir.iterdir() if p.is_dir()]
+            bt_versions.sort(key=lambda s: [int(x) for x in s.split(".")])
+        highest_bt = bt_versions[-1] if bt_versions else ""
+        all_ok = True
         if engine_compat:
-            highest = max(installed) if installed else 0
+            required_lines: list[str] = []
+            installed_lines: list[str] = []
             if min_sdk:
-                if int(min_sdk) > highest:
+                req = min_sdk
+                inst = str(highest)
+                required_lines.append(f"MinSDKVersion={req}")
+                installed_lines.append(f"MinSDKVersion={inst}")
+                if req.lower() != "latest" and int(req) > highest:
                     self.log(
-                        f"[env] Installed SDK {highest} < MinSDK {min_sdk}",
+                        f"[env] Installed SDK {highest} < MinSDK {req}",
                         "warning",
                     )
+                    all_ok = False
                 else:
-                    self.log(f"[env] MinSDK {min_sdk} OK", "success")
+                    self.log(f"[env] MinSDK {req} OK", "success")
             if target_sdk and target_sdk != min_sdk:
-                if int(target_sdk) > highest:
+                req = target_sdk
+                inst = str(highest)
+                required_lines.append(f"TargetSDKVersion={req}")
+                installed_lines.append(f"TargetSDKVersion={inst}")
+                if req.lower() != "latest" and int(req) > highest:
                     self.log(
-                        f"[env] Installed SDK {highest} < TargetSDK {target_sdk}",
+                        f"[env] Installed SDK {highest} < TargetSDK {req}",
                         "warning",
                     )
+                    all_ok = False
                 else:
-                    self.log(f"[env] TargetSDK {target_sdk} OK", "success")
+                    self.log(f"[env] TargetSDK {req} OK", "success")
+            if sdk_override:
+                req = sdk_override
+                inst = str(highest)
+                required_lines.append(f"SDKAPILevelOverride={req}")
+                installed_lines.append(f"SDKAPILevelOverride={inst}")
+                if req.lower() != "latest" and int(req) > highest:
+                    self.log(
+                        f"[env] Installed SDK {highest} < SDKAPI {req}",
+                        "warning",
+                    )
+                    all_ok = False
+                else:
+                    self.log(f"[env] SDKAPI {req} OK", "success")
+            if ndk_override:
+                req = ndk_override
+                inst = str(highest)
+                required_lines.append(f"NDKAPILevelOverride={req}")
+                installed_lines.append(f"NDKAPILevelOverride={inst}")
+                if req.lower() != "latest" and int(req) > highest:
+                    self.log(
+                        f"[env] Installed SDK {highest} < NDKAPI {req}",
+                        "warning",
+                    )
+                    all_ok = False
+                else:
+                    self.log(f"[env] NDKAPI {req} OK", "success")
+            if build_tools_req:
+                req = build_tools_req
+                inst = highest_bt
+                required_lines.append(f"BuildToolsVersion={req}")
+                installed_lines.append(f"BuildToolsVersion={inst}")
+                if req.lower() != "latest" and inst:
+
+                    def parse(v: str) -> list[int]:
+                        return [int(x) for x in v.split(".") if x.isdigit()]
+
+                    if parse(inst) < parse(req):
+                        self.log(
+                            f"[env] Build-tools {inst} < required {req}",
+                            "warning",
+                        )
+                        all_ok = False
+                    else:
+                        self.log(f"[env] Build-tools {req} OK", "success")
+                elif not inst:
+                    self.log("[env] Build-tools not found", "warning")
+                    all_ok = False
+            diff = "\n".join(
+                difflib.unified_diff(
+                    required_lines,
+                    installed_lines,
+                    "engine",
+                    "installed",
+                    lineterm="",
+                )
+            )
+            if diff:
+                self.log(f"[env]\n{diff}", "info")
+            if all_ok:
+                self.log("[env] SDKs are Engine compatible", "success")
         else:
             if min_sdk:
-                p = platforms / f"android-{min_sdk}"
-                if p.exists():
+                p = (platforms / f"android-{min_sdk}") if platforms else None
+                if p and p.exists():
                     self.log(f"[env] MinSDK {min_sdk} OK", "success")
                 else:
                     self.log(f"[env] Missing platform android-{min_sdk}", "warning")
+                    all_ok = False
             if target_sdk and target_sdk != min_sdk:
-                p = platforms / f"android-{target_sdk}"
-                if p.exists():
+                p = (platforms / f"android-{target_sdk}") if platforms else None
+                if p and p.exists():
                     self.log(f"[env] TargetSDK {target_sdk} OK", "success")
                 else:
                     self.log(f"[env] Missing platform android-{target_sdk}", "warning")
+                    all_ok = False
         ndk_dir = self.sdk_path / "ndk"
         if not ndk_dir.exists() or not any(ndk_dir.iterdir()):
             self.log("[env] NDK missing", "warning")
+            all_ok = False
         build_tools = self.sdk_path / "build-tools"
         if not build_tools.exists() or not any(build_tools.iterdir()):
             self.log("[env] Build-tools missing", "warning")
+            all_ok = False
+        if not engine_compat and all_ok:
+            self.log("[env] Environment configuration functional", "success")
 
     def _test_component(self, component: str) -> None:
         path = self.component_paths.get(component)
