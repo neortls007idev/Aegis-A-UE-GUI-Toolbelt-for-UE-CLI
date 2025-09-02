@@ -33,7 +33,7 @@ class ColorButton(QPushButton):
 
     def _choose_color(self) -> None:
         original = QColor(self._color)
-        dlg = QColorDialog(self._color, self)
+        dlg = QColorDialog(self._color, self.window())
         dlg.currentColorChanged.connect(self._preview_color)
         if dlg.exec():
             self._color = dlg.currentColor()
