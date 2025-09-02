@@ -41,7 +41,12 @@ class Uaft:
         cfg = configparser.ConfigParser()
         cfg.read(cfg_path)
         sec = "/Script/AndroidFileServerEditor.AndroidFileServerRuntimeSettings"
-        return cfg.get(sec, "securityToken", fallback=None)
+        if cfg.has_section(sec):
+            token = cfg.get(sec, "SecurityToken", fallback=None)
+            if token and "=" in token:
+                token = token.split("=", 1)[1].strip()
+            return token
+        return None
 
     def _watch_token(self) -> None:
         while not self._stop_evt.is_set():

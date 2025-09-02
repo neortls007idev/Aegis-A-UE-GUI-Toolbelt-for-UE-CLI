@@ -104,6 +104,10 @@ class MainWindow(QMainWindow):
         self.logDock.setWidget(log_container)
         self.logDock.setObjectName("dock_live_log")
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
+        self.logDock.setFeatures(
+            QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetClosable
+        )
+        self.logDock.hide()
 
         # Dock: Artifacts
         self.artifacts = QTextEdit("Artifacts (stub)")
@@ -359,6 +363,7 @@ class MainWindow(QMainWindow):
 
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
+        self.logDock.hide()
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
 
     def _echo_test(self):
@@ -511,6 +516,8 @@ class MainWindow(QMainWindow):
 
     def _log(self, message: str, level: str = "info") -> None:
         self.log_messages.append((message, level))
+        if not self.logDock.isVisible():
+            self.logDock.show()
         if self._log_matches_filters(message, level):
             color = self.log_colors.color_for(message, level)
             self.log.append(f"<span style='color:{color};'>{message}</span>")
