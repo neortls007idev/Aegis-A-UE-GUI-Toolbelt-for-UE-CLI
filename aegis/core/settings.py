@@ -1,5 +1,7 @@
 from PySide6.QtCore import QByteArray, QSettings
 
+from aegis.core.key_bindings import KeyBindings
+
 ORG = "Aegis"
 APP = "AegisToolbelt"
 
@@ -7,6 +9,7 @@ APP = "AegisToolbelt"
 class Settings:
     def __init__(self) -> None:
         self.s = QSettings(ORG, APP)
+        self.key_bindings = KeyBindings(self.s)
 
     # theme
     def theme_mode(self) -> str:
@@ -55,5 +58,6 @@ class Settings:
             self.s.remove("profile/path")
         else:
             self.s.setValue("profile/path", path)
+
 
 settings = Settings()

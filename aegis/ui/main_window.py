@@ -16,6 +16,7 @@ from aegis.core.profile import Profile
 from aegis.core.settings import settings
 from aegis.core.task_runner import TaskRunner
 from aegis.ui.widgets.profile_editor import ProfileEditor
+from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
 
 
 LAYOUT_VERSION = 2
@@ -63,7 +64,9 @@ class MainWindow(QMainWindow):
 
         self.runner = TaskRunner()
         self.profile: Profile | None = None
+        self.actions: dict[str, QAction] = {}
         self._build_menu()
+        self._apply_key_bindings()
         self._apply_saved_layout()
         self._apply_saved_theme()
         self._load_last_profile()
@@ -75,18 +78,19 @@ class MainWindow(QMainWindow):
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
         act_new = QAction("New Window", self)
-        act_new.setShortcut("Ctrl+Shift+N")
         file_menu.addAction(act_new)
         act_new.triggered.connect(self._new_window)
+        self.actions["file.new_window"] = act_new
         act_exit = QAction("Exit", self)
         file_menu.addAction(act_exit)
         act_exit.triggered.connect(self.close)
+        self.actions["file.exit"] = act_exit
 
         view_menu = self.menuBar().addMenu("&View")
         act_reset = QAction("Reset Layout", self)
-        act_reset.setShortcut("Ctrl+0")
         view_menu.addAction(act_reset)
         act_reset.triggered.connect(self._reset_layout)
+        self.actions["view.reset_layout"] = act_reset
 
         tools_menu = self.menuBar().addMenu("&Tools")
         act_echo = QAction("Echo Test Command", self)
@@ -97,15 +101,19 @@ class MainWindow(QMainWindow):
         act_new_profile = QAction("New", self)
         profile_menu.addAction(act_new_profile)
         act_new_profile.triggered.connect(self._new_profile)
+        self.actions["profile.new"] = act_new_profile
         act_open_profile = QAction("Open…", self)
         profile_menu.addAction(act_open_profile)
         act_open_profile.triggered.connect(self._open_profile)
+        self.actions["profile.open"] = act_open_profile
         act_save_profile = QAction("Save", self)
         profile_menu.addAction(act_save_profile)
         act_save_profile.triggered.connect(self._save_profile)
+        self.actions["profile.save"] = act_save_profile
         act_edit_profile = QAction("Edit…", self)
         profile_menu.addAction(act_edit_profile)
         act_edit_profile.triggered.connect(self._edit_profile)
+        self.actions["profile.edit"] = act_edit_profile
 
         settings_menu = self.menuBar().addMenu("&Settings")
         theme_menu = settings_menu.addMenu("Load Theme…")
@@ -122,6 +130,17 @@ class MainWindow(QMainWindow):
         theme_menu.addAction(act_custom)
         act_custom.triggered.connect(self._create_custom_theme)
 
+        kb_menu = settings_menu.addMenu("Key Bindings")
+        act_edit_keys = QAction("Edit…", self)
+        kb_menu.addAction(act_edit_keys)
+        act_edit_keys.triggered.connect(self._edit_key_bindings)
+        act_import_keys = QAction("Import…", self)
+        kb_menu.addAction(act_import_keys)
+        act_import_keys.triggered.connect(self._import_key_bindings)
+        act_export_keys = QAction("Export…", self)
+        kb_menu.addAction(act_export_keys)
+        act_export_keys.triggered.connect(self._export_key_bindings)
+
         help_menu = self.menuBar().addMenu("&Help")
         act_about = QAction("About", self)
         help_menu.addAction(act_about)
@@ -130,6 +149,41 @@ class MainWindow(QMainWindow):
                 self, "About", "Aegis Toolbelt — GUI helper for UE CLIs (and beyond)."
             )
         )
+
+    def _apply_key_bindings(self) -> None:
+        kb = settings.key_bindings
+        for action_id, act in self.actions.items():
+            seq = kb.get(action_id)
+            if seq:
+                act.setShortcut(seq)
+
+    def _edit_key_bindings(self) -> None:
+        dlg = KeyBindingsEditor(settings.key_bindings.all(), self)
+        if dlg.exec():
+            for action, seq in dlg.get_bindings().items():
+                settings.key_bindings.set(action, seq or None)
+            self._apply_key_bindings()
+
+    def _import_key_bindings(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Key Bindings", "", "JSON (*.json)"
+        )
+        if path:
+            try:
+                settings.key_bindings.import_json(path)
+                self._apply_key_bindings()
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", str(e))
+
+    def _export_key_bindings(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Key Bindings", "", "JSON (*.json)"
+        )
+        if path:
+            try:
+                settings.key_bindings.export_json(path)
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", str(e))
 
     # ----- Actions -----
     def _new_window(self):
@@ -193,23 +247,20 @@ class MainWindow(QMainWindow):
         if not getattr(self, "profile", None):
             QMessageBox.information(self, "No Profile", "No profile to save.")
             return
-        path = settings.profile_path()
-        if path:
-            try:
-                self.profile.save(Path(path))
-            except Exception as e:
-                QMessageBox.critical(self, "Save Error", str(e))
-        else:
-            self._save_profile_as()
+        self._save_profile_as(settings.profile_path())
 
-    def _save_profile_as(self) -> None:
+    def _save_profile_as(self, start_path: str | None = None) -> None:
         if not getattr(self, "profile", None):
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Profile", "", "JSON (*.json)")
+        initial = start_path or ""
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Profile", initial, "JSON (*.json)"
+        )
         if path:
             try:
                 self.profile.save(Path(path))
                 settings.set_profile_path(path)
+                self._log(f"[profile] Saved to {path}", "success")
             except Exception as e:
                 QMessageBox.critical(self, "Save Error", str(e))
 
