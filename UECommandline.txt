@@ -1,0 +1,2 @@
+-tracehost=127.0.0.1 -trace=Bookmark,Frame,CPU,GPU,LoadTime,File -cpuprofilertrace -statnamedevents -filetrace -loadtimetrace
+# For Memory Insights: include -trace=default,memory (and ensure Dev build)
