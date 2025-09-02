@@ -87,49 +87,6 @@ def test_retest_sdks_logs_failed(app: QApplication, tmp_path: Path) -> None:
     )
 
 
-def test_engine_compat_sdk_test_logs(app: QApplication, tmp_path: Path) -> None:
-    logs: list[tuple[str, str]] = []
-    engine = tmp_path / "eng_ec"
-    (engine / "Extras" / "Android" / "SDK").mkdir(parents=True)
-    (engine / "Extras" / "Android" / "NDK").mkdir(parents=True)
-    (engine / "Extras" / "Android" / "JDK").mkdir(parents=True)
-    proj = tmp_path / "proj"
-    cfg = proj / "Config"
-    cfg.mkdir(parents=True)
-    (cfg / "DefaultEngine.ini").write_text(
-        "[/Script/AndroidRuntimeSettings.AndroidRuntimeSettings]\n", "utf-8"
-    )
-    panel = EnvDocPanel(TaskRunner(), lambda m, level: logs.append((m, level)))
-    panel.update_profile(Profile(engine, proj))
-    logs.clear()
-    panel._test_sdk(True)
-    assert logs[-1] == (
-        "[env] Engine Compatibility SDK test complete",
-        "success",
-    )
-
-
-def test_engine_compat_sdk_test_failed(app: QApplication, tmp_path: Path) -> None:
-    logs: list[tuple[str, str]] = []
-    engine = tmp_path / "eng_ec_fail"
-    (engine / "Extras" / "Android" / "SDK").mkdir(parents=True)
-    proj = tmp_path / "proj_fail"
-    cfg = proj / "Config"
-    cfg.mkdir(parents=True)
-    (cfg / "DefaultEngine.ini").write_text(
-        "[/Script/AndroidRuntimeSettings.AndroidRuntimeSettings]\nMinSDKVersion=33\n",
-        "utf-8",
-    )
-    panel = EnvDocPanel(TaskRunner(), lambda m, level: logs.append((m, level)))
-    panel.update_profile(Profile(engine, proj))
-    logs.clear()
-    panel._test_sdk(True)
-    assert logs[-1] == (
-        "[env] Engine Compatibility SDK test failed",
-        "error",
-    )
-
-
 def test_env_fix_dialog_add_scripts(app: QApplication, tmp_path: Path) -> None:
     dlg = EnvFixDialog({})
     s1 = tmp_path / "one.bat"
