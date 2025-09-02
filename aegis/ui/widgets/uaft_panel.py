@@ -107,6 +107,9 @@ class UaftPanel(QWidget):
         self.pull_dir = QLineEdit()
         self.pull_base: Path | None = None
         self.btn_choose_dir = QPushButton("Choose Folder…")
+        self.chk_auto_path = QCheckBox("Auto path")
+        self.chk_auto_path.setChecked(True)
+        self.chk_auto_path.setToolTip("Path will change on device selection")
         self.btn_pull = QPushButton("Pull Selected Trace")
         self.chk_open_insights = QCheckBox("Open in Unreal Insights after pull")
 
@@ -171,6 +174,7 @@ class UaftPanel(QWidget):
                     QLabel("Pull to:"),
                     self.pull_dir,
                     self.btn_choose_dir,
+                    self.chk_auto_path,
                     self.btn_pull,
                     self.chk_open_insights,
                 ]
@@ -197,6 +201,7 @@ class UaftPanel(QWidget):
         self.btn_refresh_traces.clicked.connect(self._refresh_traces)
         self.btn_choose_dir.clicked.connect(self._choose_dir)
         self.btn_pull.clicked.connect(self._pull_trace)
+        self.chk_auto_path.toggled.connect(lambda _checked: self._device_selected())
 
     # ----- Profile -----
     def update_profile(self, profile: Optional[Profile]) -> None:
@@ -205,6 +210,7 @@ class UaftPanel(QWidget):
         self._apply_project_prefix()
         self._load_security_token()
         self._apply_pull_base()
+        self._device_selected()
 
     def _apply_project_prefix(self) -> None:
         if not self.profile:
@@ -339,8 +345,10 @@ class UaftPanel(QWidget):
             self.serial.setText(serial)
             make = self.device_table.item(row, 0).text()
             model = self.device_table.item(row, 1).text()
-            if self.pull_base:
-                self.pull_dir.setText(str(self.pull_base / f"{make}{model}"))
+            if self.pull_base and self.chk_auto_path.isChecked():
+                make_safe = make.replace(" ", "_")
+                model_safe = model.replace(" ", "_")
+                self.pull_dir.setText(str(self.pull_base / f"{make_safe}_{model_safe}"))
 
     def _list_packages(self) -> None:
         uaft = self._require_uaft()

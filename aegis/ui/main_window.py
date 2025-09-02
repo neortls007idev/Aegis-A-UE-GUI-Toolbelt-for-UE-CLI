@@ -35,7 +35,7 @@ from aegis.ui.widgets.feedback_dialog import FeedbackDialog
 from aegis.ui.widgets.help_dialog import HelpDialog
 
 
-LAYOUT_VERSION = 3
+LAYOUT_VERSION = 4
 LOG_LABELS = {
     "info": "Information:",
     "error": "Error:",
@@ -58,12 +58,22 @@ class MainWindow(QMainWindow):
         # Center tabs
         self.tabs = QTabWidget()
         self.env_doc = EnvDocPanel(self.runner, self._log)
+        env_container = QWidget()
+        env_layout = QVBoxLayout(env_container)
+        env_layout.setAlignment(Qt.AlignTop)
+        env_layout.addWidget(self.env_doc, alignment=Qt.AlignHCenter)
+        env_layout.addStretch(1)
         self.uaft_panel = UaftPanel(self.runner, self._log)
-        self.tabs.addTab(self.env_doc, "EnvDoc")
+        uaft_container = QWidget()
+        uaft_layout = QVBoxLayout(uaft_container)
+        uaft_layout.setAlignment(Qt.AlignTop)
+        uaft_layout.addWidget(self.uaft_panel, alignment=Qt.AlignHCenter)
+        uaft_layout.addStretch(1)
+        self.tabs.addTab(env_container, "EnvDoc")
         self.tabs.addTab(QTextEdit("Build (stub)"), "Build")
         self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
         self.tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
-        self.tabs.addTab(self.uaft_panel, "Devices / UAFT")
+        self.tabs.addTab(uaft_container, "Devices / UAFT")
         self.tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
         self.tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
 
@@ -73,6 +83,7 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.info_bar)
         central_layout.addWidget(self.tabs)
         self.setCentralWidget(central)
+        self._update_panel_widths()
 
         # Status bar with progress and cancel button
         self.status = QStatusBar()
@@ -111,19 +122,11 @@ class MainWindow(QMainWindow):
         self.logDock.setWidget(log_container)
         self.logDock.setObjectName("dock_live_log")
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
-        self.logDock.setFeatures(QDockWidget.DockWidgetMovable)
-        self.logDock.setAllowedAreas(Qt.BottomDockWidgetArea)
-        self.logDock.setMinimumHeight(120)
+        self.logDock.setFeatures(
+            QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
+        )
+        self.logDock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.TopDockWidgetArea)
         self.logDock.hide()
-
-        # Dock: Artifacts
-        self.artifacts = QTextEdit("Artifacts (stub)")
-        self.artDock = QDockWidget("Artifacts")
-        self.artDock.setWidget(self.artifacts)
-        self.artDock.setObjectName("dock_artifacts")
-        self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
-        self.artDock.setAllowedAreas(Qt.RightDockWidgetArea)
-        self.artDock.setMinimumWidth(120)
 
         self.profile: Profile | None = None
         self.actions: dict[str, QAction] = {}
@@ -135,6 +138,15 @@ class MainWindow(QMainWindow):
         QGuiApplication.styleHints().colorSchemeChanged.connect(
             self._on_system_theme_change
         )
+
+    def resizeEvent(self, event):  # type: ignore[override]
+        super().resizeEvent(event)
+        self._update_panel_widths()
+
+    def _update_panel_widths(self) -> None:
+        max_w = int(self.width() * 0.8)
+        self.env_doc.setMaximumWidth(max_w)
+        self.uaft_panel.setMaximumWidth(max_w)
 
     # ----- Menus -----
     def _build_menu(self) -> None:
@@ -388,7 +400,6 @@ class MainWindow(QMainWindow):
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
         self.logDock.hide()
-        self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
 
     def _echo_test(self):
         argv = [sys.executable, "-c", "print('Aegis OK')"]
