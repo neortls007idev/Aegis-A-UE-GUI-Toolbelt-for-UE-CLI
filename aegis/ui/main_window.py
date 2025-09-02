@@ -131,6 +131,7 @@ class MainWindow(QMainWindow):
             lambda _area: self._reset_log_dock_size()
         )
         self._reset_log_dock_size()
+        self.logDock.show()
 
         self.profile: Profile | None = None
         self.actions: dict[str, QAction] = {}
@@ -149,7 +150,7 @@ class MainWindow(QMainWindow):
         self._reset_log_dock_size()
 
     def _update_panel_widths(self) -> None:
-        max_w = int(self.width() * 0.8)
+        max_w = int(self.width() * 0.97)
         self.env_doc.setFixedWidth(max_w)
         self.uaft_panel.setFixedWidth(max_w)
 
@@ -408,7 +409,8 @@ class MainWindow(QMainWindow):
 
     def _reset_layout(self):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
-        self.logDock.hide()
+        self.logDock.show()
+        self._reset_log_dock_size()
 
     def _echo_test(self):
         argv = [sys.executable, "-c", "print('Aegis OK')"]
