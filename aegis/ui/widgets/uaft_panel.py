@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QLineEdit,
+    QInputDialog,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -199,6 +200,31 @@ class UaftPanel(QWidget):
     def update_profile(self, profile: Optional[Profile]) -> None:
         self.profile = profile
         self._scan()
+        self._apply_project_prefix()
+        self._load_security_token()
+
+    def _apply_project_prefix(self) -> None:
+        if not self.profile:
+            self.trace_args.setPlainText(DEFAULT_TRACE_ARGS)
+            return
+        proj = self.profile.project_dir.name
+        prefix = f"../../../{proj}/{proj}.uproject "
+        self.trace_args.setPlainText(prefix + DEFAULT_TRACE_ARGS)
+
+    def _load_security_token(self) -> None:
+        self.security_token.clear()
+        if not self.profile:
+            return
+        cfg = self.profile.project_dir / "Config" / "DefaultGame.ini"
+        if not cfg.exists():
+            return
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("SecurityToken="):
+                token = line.split("=", 1)[1].strip()
+                if token:
+                    self.security_token.setText(token)
+                break
 
     def _scan(self) -> None:
         self.uaft_path = None
@@ -237,6 +263,10 @@ class UaftPanel(QWidget):
             self.log("[uaft] UAFT not found", "error")
             return None
         return self.uaft
+
+    def _log_cmd(self, argv: list[str], token: str | None) -> None:
+        shown = ["<redacted>" if token and a == token else a for a in argv]
+        self.log(f"[uaft] {' '.join(shown)}", "info")
 
     def _adb_device_info(self, serial: str) -> tuple[str, str]:
         try:
@@ -338,6 +368,20 @@ class UaftPanel(QWidget):
         port = self.port.text().strip() or None
         pkg = self.package.text().strip()
         token = self.security_token.text().strip() or None
+        if not token:
+            token, ok = QInputDialog.getText(
+                self,
+                "Security Token Required",
+                (
+                    "Security token not configured.\n"
+                    "Enter the token from Project Settings → Plugins → Android File Server"
+                    " → Packaging or Config/DefaultGame.ini"
+                ),
+            )
+            if not ok or not token:
+                self.log("[uaft] Security token required", "error")
+                return
+            self.security_token.setText(token)
         if not pkg:
             self.log("[uaft] Package is required", "error")
             return
@@ -348,7 +392,7 @@ class UaftPanel(QWidget):
         tmp = Path.home() / "UECommandLine.txt"
         tmp.write_text(content, encoding="utf-8")
         argv = uaft.push_commandfile_argv(serial, ip, port, pkg, token, str(tmp))
-        self.log(f"[uaft] {' '.join(argv)}", "info")
+        self._log_cmd(argv, token)
         try:
             self.runner.start(
                 argv,
@@ -375,7 +419,7 @@ class UaftPanel(QWidget):
             return
         lines: list[str] = []
         argv = uaft.list_traces_argv(serial, ip, port, pkg, token)
-        self.log(f"[uaft] {' '.join(argv)}", "info")
+        self._log_cmd(argv, token)
         try:
             self.runner.start(
                 argv,
@@ -420,7 +464,7 @@ class UaftPanel(QWidget):
         dest = Path(self.pull_dir.text().strip())
         argv = uaft.pull_trace_argv(serial, ip, port, pkg, token, remote, dest)
         local_path = dest / Path(remote).name
-        self.log(f"[uaft] {' '.join(argv)}", "info")
+        self._log_cmd(argv, token)
         try:
             self.runner.start(
                 argv,
