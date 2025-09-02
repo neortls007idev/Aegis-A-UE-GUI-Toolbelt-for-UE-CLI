@@ -1,8 +1,9 @@
 from pathlib import Path
 import sys
+import subprocess
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QGuiApplication
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -29,6 +30,8 @@ from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 from aegis.ui.widgets.uaft_panel import UaftPanel
 from aegis.ui.widgets.log_colors_editor import LogColorsEditor
+from aegis.ui.widgets.feedback_dialog import FeedbackDialog
+from aegis.ui.widgets.help_dialog import HelpDialog
 
 
 LAYOUT_VERSION = 3
@@ -209,13 +212,67 @@ class MainWindow(QMainWindow):
         act_reset_keys.triggered.connect(self._reset_key_bindings)
 
         help_menu = self.menuBar().addMenu("&Help")
+        act_help = QAction("Help", self)
+        help_menu.addAction(act_help)
+        act_help.triggered.connect(self._show_help)
+        self.actions["help.contents"] = act_help
+
+        act_feedback = QAction("Provide Feedback", self)
+        help_menu.addAction(act_feedback)
+        act_feedback.triggered.connect(self._send_feedback)
+        self.actions["help.feedback"] = act_feedback
+
         act_about = QAction("About", self)
         help_menu.addAction(act_about)
-        act_about.triggered.connect(
-            lambda: QMessageBox.information(
-                self, "About", "Aegis Toolbelt — GUI helper for UE CLIs (and beyond)."
+        act_about.triggered.connect(self._show_about)
+        self.actions["help.about"] = act_about
+
+    def _show_help(self) -> None:
+        readme = Path(__file__).resolve().parents[2] / "README.md"
+        dlg = HelpDialog(readme, self)
+        dlg.exec()
+
+    def _send_feedback(self) -> None:
+        dlg = FeedbackDialog(self)
+        if dlg.exec():
+            subject, body = dlg.get_feedback()
+            import urllib.parse
+
+            query = urllib.parse.urlencode({"subject": subject, "body": body})
+            QDesktopServices.openUrl(
+                QUrl(f"mailto:rahulguptagamedev@gmail.com?{query}")
             )
+
+    def _show_about(self) -> None:
+        version = self._get_version()
+        repo_url = (
+            "https://github.com/rahulguptagamedev/Aegis-A-UE-GUI-Toolbelt-for-UE-CLI"
         )
+        info = (
+            f"<b>Aegis Toolbelt</b><br>Version: {version}<br>"
+            "Author: Rahul Gupta<br>"
+            f"Repository: <a href='{repo_url}'>{repo_url}</a><br>"
+            "A UE GUI toolbelt for Unreal Engine command-line tools.<br>"
+            "Licensed under the <a href='https://www.apache.org/licenses/LICENSE-2.0'>Apache 2.0 License</a>."
+        )
+        msg = QMessageBox(self)
+        msg.setWindowTitle("About")
+        msg.setTextFormat(Qt.RichText)
+        msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        msg.setText(info)
+        msg.exec()
+
+    def _get_version(self) -> str:
+        try:
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return result.stdout.strip()
+        except Exception:
+            return "unknown"
 
     def _apply_key_bindings(self) -> None:
         kb = settings.key_bindings
@@ -294,8 +351,6 @@ class MainWindow(QMainWindow):
     # ----- Actions -----
     def _new_window(self):
         # launch a new process of this app
-        import subprocess
-
         argv = [sys.executable, "-m", "aegis.app"]
         try:
             subprocess.Popen(argv, shell=False)
