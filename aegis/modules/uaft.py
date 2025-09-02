@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import configparser
+import threading
+import time
 
 
 @dataclass
@@ -15,6 +18,58 @@ class Uaft:
     """
 
     exe: Path
+    project_dir: Path | None = None
+    _token: str | None = field(init=False, default=None)
+    _token_mtime: float = field(init=False, default=0.0)
+    _watcher: threading.Thread | None = field(init=False, default=None)
+    _stop_evt: threading.Event = field(init=False, default_factory=threading.Event)
+
+    def __post_init__(self) -> None:
+        if self.project_dir:
+            self._start_watcher()
+
+    # ----- Security token -----
+    def _config_path(self) -> Path | None:
+        if not self.project_dir:
+            return None
+        return self.project_dir / "Config" / "DefaultEngine.ini"
+
+    def _read_token(self) -> str | None:
+        cfg_path = self._config_path()
+        if not cfg_path or not cfg_path.exists():
+            return None
+        cfg = configparser.ConfigParser()
+        cfg.read(cfg_path)
+        sec = "/Script/AndroidFileServerEditor.AndroidFileServerRuntimeSettings"
+        return cfg.get(sec, "securityToken", fallback=None)
+
+    def _watch_token(self) -> None:
+        while not self._stop_evt.is_set():
+            cfg_path = self._config_path()
+            if cfg_path and cfg_path.exists():
+                mtime = cfg_path.stat().st_mtime
+                if mtime != self._token_mtime:
+                    self._token_mtime = mtime
+                    self._token = self._read_token()
+            time.sleep(1)
+
+    def _start_watcher(self) -> None:
+        self._token = self._read_token()
+        cfg_path = self._config_path()
+        if cfg_path and cfg_path.exists():
+            self._token_mtime = cfg_path.stat().st_mtime
+        self._watcher = threading.Thread(target=self._watch_token, daemon=True)
+        self._watcher.start()
+
+    def stop(self) -> None:
+        self._stop_evt.set()
+        if self._watcher and self._watcher.is_alive():
+            self._watcher.join(timeout=1)
+
+    def security_token(self) -> str | None:
+        if not self._token:
+            self._token = self._read_token()
+        return self._token
 
     # ----- Arg builders -----
     def devices_argv(self) -> list[str]:
@@ -57,6 +112,7 @@ class Uaft:
         if port:
             args += ["-t", port]
         args += ["-p", package]
+        token = token or self.security_token()
         if token:
             args += ["-k", token]
         args += ["push", local_cmd, "^commandfile"]
@@ -78,6 +134,7 @@ class Uaft:
         if port:
             args += ["-t", port]
         args += ["-p", package]
+        token = token or self.security_token()
         if token:
             args += ["-k", token]
         args += ["ls", "-R", "^saved/Traces"]
@@ -111,6 +168,7 @@ class Uaft:
         if port:
             args += ["-t", port]
         args += ["-p", package]
+        token = token or self.security_token()
         if token:
             args += ["-k", token]
         args += ["pull", remote_file, str(local_dir)]

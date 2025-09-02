@@ -7,6 +7,8 @@ import os
 import tempfile
 import urllib.request
 from pathlib import Path
+import shutil
+import subprocess
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -39,12 +41,17 @@ class EnvDocPanel(QWidget):
         self.runner = runner
         self.log = log_cb
         self.profile: Profile | None = None
+        self.sdk_path: Path | None = None
 
         layout = QVBoxLayout(self)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Component", "Path", "Status"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Component", "Path", "Status", "Actions"])
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
+
+        self.test_button = QPushButton("Test SDK")
+        self.test_button.clicked.connect(self._test_sdk)
+        layout.addWidget(self.test_button)
 
         self.fix_button = QPushButton("Fix Env")
         self.fix_button.clicked.connect(self._fix_env)
@@ -93,8 +100,10 @@ class EnvDocPanel(QWidget):
                     "Vulkan SDK": sec.get("VulkanPath", ""),
                 }
 
-        sdk_path: Path | None = None
-        for row, (name, parts) in enumerate(components.items()):
+        optional_required = {"Vulkan SDK"}
+        self.sdk_path = None
+        row = 0
+        for name, parts in components.items():
             default = self.profile.engine_root.joinpath(*parts)
             candidates: list[Path] = [default]
             ini_val = ini_values.get(name)
@@ -104,8 +113,8 @@ class EnvDocPanel(QWidget):
                 p = os.environ.get(var)
                 if p:
                     candidates.append(Path(p))
-            if name == "Android NDK" and sdk_path:
-                ndk_dir = sdk_path / "ndk"
+            if name == "Android NDK" and self.sdk_path:
+                ndk_dir = self.sdk_path / "ndk"
                 if ndk_dir.exists():
                     subdirs = sorted(
                         [p for p in ndk_dir.iterdir() if p.is_dir()], reverse=True
@@ -115,9 +124,10 @@ class EnvDocPanel(QWidget):
                     candidates.append(ndk_dir)
             path = next((p for p in candidates if p.exists()), default)
             if name == "Android SDK":
-                sdk_path = path
+                self.sdk_path = path
             self.table.insertRow(row)
-            self.table.setItem(row, 0, QTableWidgetItem(name))
+            display = f"{name} (optional)" if name in optional_required else name
+            self.table.setItem(row, 0, QTableWidgetItem(display))
             self.table.setItem(row, 1, QTableWidgetItem(str(path)))
             if path.is_dir():
                 item = QTableWidgetItem("Found")
@@ -127,10 +137,66 @@ class EnvDocPanel(QWidget):
                 item.setForeground(QColor("#c80"))
             else:
                 item = QTableWidgetItem("Missing")
-                item.setForeground(QColor("#a00"))
+                color = "#c80" if name in optional_required else "#a00"
+                item.setForeground(QColor(color))
             self.table.setItem(row, 2, item)
+            fix_btn = QPushButton("Fix")
+            fix_btn.clicked.connect(lambda _, comp=name: self._fix_component(comp))
+            self.table.setCellWidget(row, 3, fix_btn)
+            row += 1
+
+        optional_tools = {
+            "CMake": "cmake",
+            "NMake": "nmake",
+            ".NET SDK": "dotnet",
+            "VS Build Tools": "msbuild",
+            "Clang-Format": "clang-format",
+        }
+        for name, exe in optional_tools.items():
+            path_str = shutil.which(exe) or ""
+            display_path = path_str
+            status = "Missing"
+            ok = False
+            if path_str:
+                ok = True
+                if name == ".NET SDK":
+                    try:
+                        out = subprocess.run(
+                            ["dotnet", "--list-sdks"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            check=False,
+                        )
+                        versions = [
+                            ln.split()[0] for ln in out.stdout.splitlines() if ln
+                        ]
+                        ok = any(3 <= int(v.split(".")[0]) <= 8 for v in versions)
+                        if versions:
+                            display_path = versions[0]
+                    except Exception:  # pragma: no cover - external tool
+                        pass
+                status = "Found" if ok else "Missing"
+            self.table.insertRow(row)
+            self.table.setItem(row, 0, QTableWidgetItem(f"{name} (optional)"))
+            self.table.setItem(row, 1, QTableWidgetItem(display_path))
+            item = QTableWidgetItem(status)
+            item.setForeground(QColor("#0a0" if ok else "#c80"))
+            self.table.setItem(row, 2, item)
+            row += 1
 
     # ----- Fix -----
+    def _fix_component(self, component: str) -> None:
+        if not self.profile:
+            self.log("[env] No profile selected", "error")
+            return
+        scripts = self._collect_scripts()
+        for name, path in scripts.items():
+            if component.split()[0].lower() in name.lower():
+                self._run_scripts([path])
+                return
+        self.log(f"[env] No fix script for {component}", "error")
+
     def _fix_env(self) -> None:
         if not self.profile:
             self.log("[env] No profile selected", "error")
@@ -146,6 +212,43 @@ class EnvDocPanel(QWidget):
         if not selected:
             return
         self._run_scripts(selected)
+
+    def _test_sdk(self) -> None:
+        if not (self.profile and self.sdk_path):
+            self.log("[env] No SDK path", "error")
+            return
+        cfg_path = self.profile.project_dir / "Config" / "DefaultEngine.ini"
+        if not cfg_path.exists():
+            self.log("[env] DefaultEngine.ini not found", "error")
+            return
+        cfg = configparser.ConfigParser()
+        cfg.read(cfg_path)
+        sec = "/Script/AndroidRuntimeSettings.AndroidRuntimeSettings"
+        if not cfg.has_section(sec):
+            self.log("[env] AndroidRuntimeSettings section missing", "error")
+            return
+        settings = cfg[sec]
+        min_sdk = settings.get("MinSDKVersion")
+        target_sdk = settings.get("TargetSDKVersion")
+        platforms = self.sdk_path / "platforms"
+        if min_sdk:
+            p = platforms / f"android-{min_sdk}"
+            if p.exists():
+                self.log(f"[env] MinSDK {min_sdk} OK", "success")
+            else:
+                self.log(f"[env] Missing platform android-{min_sdk}", "warning")
+        if target_sdk and target_sdk != min_sdk:
+            p = platforms / f"android-{target_sdk}"
+            if p.exists():
+                self.log(f"[env] TargetSDK {target_sdk} OK", "success")
+            else:
+                self.log(f"[env] Missing platform android-{target_sdk}", "warning")
+        ndk_dir = self.sdk_path / "ndk"
+        if not ndk_dir.exists() or not any(ndk_dir.iterdir()):
+            self.log("[env] NDK missing", "warning")
+        build_tools = self.sdk_path / "build-tools"
+        if not build_tools.exists() or not any(build_tools.iterdir()):
+            self.log("[env] Build-tools missing", "warning")
 
     def _collect_scripts(self) -> dict[str, Path]:
         assert self.profile
