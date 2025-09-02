@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -19,17 +19,36 @@ from aegis.core.log_colors import DEFAULT_LEVEL_COLORS
 
 
 class ColorButton(QPushButton):
-    def __init__(self, color: str = "#ffffff", parent=None) -> None:
+    def __init__(
+        self,
+        color: str = "#ffffff",
+        parent=None,
+        on_preview: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self._color = QColor(color)
+        self._on_preview = on_preview
         self.clicked.connect(self._choose_color)
         self._apply_color()
 
     def _choose_color(self) -> None:
-        chosen = QColorDialog.getColor(self._color, self)
-        if chosen.isValid():
-            self._color = chosen
+        original = QColor(self._color)
+        dlg = QColorDialog(self._color, self)
+        dlg.currentColorChanged.connect(self._preview_color)
+        if dlg.exec():
+            self._color = dlg.currentColor()
             self._apply_color()
+        else:
+            self._color = original
+            self._apply_color()
+            if self._on_preview:
+                self._on_preview(original.name())
+
+    def _preview_color(self, color: QColor) -> None:
+        self._color = color
+        self._apply_color()
+        if self._on_preview:
+            self._on_preview(color.name())
 
     def _apply_color(self) -> None:
         name = self._color.name()
@@ -50,6 +69,7 @@ class LogColorsEditor(QDialog):
         levels: Dict[str, str],
         regex: List[Tuple[str, str]],
         parent=None,
+        on_preview: Callable[[str, str], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Log Colors")
@@ -59,7 +79,12 @@ class LogColorsEditor(QDialog):
         form = QFormLayout()
         self.level_buttons: Dict[str, ColorButton] = {}
         for level in ["info", "warning", "error", "success"]:
-            btn = ColorButton(levels.get(level, DEFAULT_LEVEL_COLORS[level]))
+            btn = ColorButton(
+                levels.get(level, DEFAULT_LEVEL_COLORS[level]),
+                on_preview=(
+                    (lambda c, lvl=level: on_preview(lvl, c)) if on_preview else None
+                ),
+            )
             form.addRow(level.capitalize(), btn)
             self.level_buttons[level] = btn
         layout.addLayout(form)
