@@ -21,6 +21,7 @@ from aegis.ui.widgets.profile_editor import ProfileEditor
 from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
 from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
+from aegis.ui.widgets.uaft_panel import UaftPanel
 
 
 LAYOUT_VERSION = 3
@@ -32,13 +33,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Aegis Toolbelt")
         self.resize(1280, 800)
 
-        # Center tabs (page stubs)
+        # Runner
+        self.runner = TaskRunner()
+
+        # Center tabs
         self.tabs = QTabWidget()
-        self.tabs.addTab(EnvDocPanel(), "EnvDoc")
+        self.env_doc = EnvDocPanel(self.runner, self._log)
+        self.uaft_panel = UaftPanel(self.runner, self._log)
+        self.tabs.addTab(self.env_doc, "EnvDoc")
         self.tabs.addTab(QTextEdit("Build (stub)"), "Build")
         self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
         self.tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
-        self.tabs.addTab(QTextEdit("Devices / UAFT (stub)"), "Devices / UAFT")
+        self.tabs.addTab(self.uaft_panel, "Devices / UAFT")
         self.tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
         self.tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
 
@@ -64,7 +70,6 @@ class MainWindow(QMainWindow):
         self.artDock.setObjectName("dock_artifacts")
         self.addDockWidget(Qt.RightDockWidgetArea, self.artDock)
 
-        self.runner = TaskRunner()
         self.profile: Profile | None = None
         self.actions: dict[str, QAction] = {}
         self._build_menu()
@@ -72,7 +77,6 @@ class MainWindow(QMainWindow):
         self._apply_saved_layout()
         self._apply_saved_theme()
         self._load_last_profile()
-        self.info_bar.update(self.profile, settings.profile_path())
         QGuiApplication.styleHints().colorSchemeChanged.connect(
             self._on_system_theme_change
         )
@@ -229,8 +233,8 @@ class MainWindow(QMainWindow):
         dlg = ProfileEditor(parent=self)
         if dlg.exec():
             self.profile = dlg.get_profile()
-            self._apply_profile_title()
             self._save_profile_as()
+            self._profile_changed()
 
     def _open_profile(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Open Profile", "", "JSON (*.json)")
@@ -238,8 +242,7 @@ class MainWindow(QMainWindow):
             try:
                 self.profile = Profile.load(Path(path))
                 settings.set_profile_path(path)
-                self._apply_profile_title()
-                self.info_bar.update(self.profile, settings.profile_path())
+                self._profile_changed()
             except Exception as e:
                 QMessageBox.critical(self, "Open Error", str(e))
 
@@ -250,8 +253,8 @@ class MainWindow(QMainWindow):
         dlg = ProfileEditor(self.profile, self)
         if dlg.exec():
             self.profile = dlg.get_profile()
-            self._apply_profile_title()
             self._save_profile()
+            self._profile_changed()
 
     def _save_profile(self) -> None:
         if not getattr(self, "profile", None):
@@ -271,7 +274,6 @@ class MainWindow(QMainWindow):
                 self.profile.save(Path(path))
                 settings.set_profile_path(path)
                 self._log(f"[profile] Saved to {path}", "success")
-                self.info_bar.update(self.profile, settings.profile_path())
             except Exception as e:
                 QMessageBox.critical(self, "Save Error", str(e))
 
@@ -282,8 +284,7 @@ class MainWindow(QMainWindow):
                 self.profile = Profile.load(Path(path))
             except Exception:
                 self.profile = None
-        self._apply_profile_title()
-        self.info_bar.update(self.profile, settings.profile_path())
+        self._profile_changed()
 
     def _set_theme(self, mode: str) -> None:
         settings.set_theme_mode(mode)
@@ -347,6 +348,12 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(self.profile.display_name())
         else:
             self.setWindowTitle("Aegis Toolbelt")
+
+    def _profile_changed(self) -> None:
+        self._apply_profile_title()
+        self.info_bar.update(self.profile, settings.profile_path())
+        self.env_doc.update_profile(self.profile)
+        self.uaft_panel.update_profile(self.profile)
 
     def _log(self, message: str, level: str = "info") -> None:
         colors = {
