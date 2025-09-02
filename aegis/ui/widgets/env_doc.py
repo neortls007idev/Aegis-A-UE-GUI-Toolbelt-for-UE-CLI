@@ -64,10 +64,6 @@ class EnvDocPanel(QWidget):
         self.test_button.clicked.connect(self._retest_sdks)
         layout.addWidget(self.test_button)
 
-        self.test_compat_button = QPushButton("Test SDK (Engine Compatibility)")
-        self.test_compat_button.clicked.connect(lambda: self._test_sdk(True))
-        layout.addWidget(self.test_compat_button)
-
         self.fix_button = QPushButton("Fix Env")
         self.fix_button.clicked.connect(self._fix_env)
         layout.addWidget(self.fix_button)
