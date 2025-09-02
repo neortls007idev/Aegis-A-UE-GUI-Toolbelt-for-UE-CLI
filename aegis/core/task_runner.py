@@ -1,4 +1,5 @@
-import subprocess, threading
+import subprocess
+import threading
 from typing import Callable, List, Optional
 
 class TaskRunner:
@@ -29,9 +30,14 @@ class TaskRunner:
                 cb(line.rstrip("\n"))
             stream.close()
 
-        t_out = threading.Thread(target=pump, args=(self._proc.stdout, on_stdout), daemon=True)
-        t_err = threading.Thread(target=pump, args=(self._proc.stderr, on_stderr), daemon=True)
-        t_out.start(); t_err.start()
+        t_out = threading.Thread(
+            target=pump, args=(self._proc.stdout, on_stdout), daemon=True
+        )
+        t_err = threading.Thread(
+            target=pump, args=(self._proc.stderr, on_stderr), daemon=True
+        )
+        t_out.start()
+        t_err.start()
 
         def wait_and_finish():
             code = self._proc.wait()
@@ -44,3 +50,4 @@ class TaskRunner:
         if self._proc:
             self._proc.terminate()
             self._proc = None
+

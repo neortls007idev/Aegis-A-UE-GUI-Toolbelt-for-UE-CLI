@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from aegis.core.profile import Profile
 from aegis.core.settings import settings
 from aegis.core.task_runner import TaskRunner
+from aegis.ui.widgets.profile_editor import ProfileEditor
 
 
 LAYOUT_VERSION = 2
@@ -102,6 +103,9 @@ class MainWindow(QMainWindow):
         act_save_profile = QAction("Save", self)
         profile_menu.addAction(act_save_profile)
         act_save_profile.triggered.connect(self._save_profile)
+        act_edit_profile = QAction("Edit…", self)
+        profile_menu.addAction(act_edit_profile)
+        act_edit_profile.triggered.connect(self._edit_profile)
 
         settings_menu = self.menuBar().addMenu("&Settings")
         theme_menu = settings_menu.addMenu("Load Theme…")
@@ -123,9 +127,7 @@ class MainWindow(QMainWindow):
         help_menu.addAction(act_about)
         act_about.triggered.connect(
             lambda: QMessageBox.information(
-                self,
-                "About",
-                "Aegis Toolbelt — GUI helper for UE CLIs (and beyond).",
+                self, "About", "Aegis Toolbelt — GUI helper for UE CLIs (and beyond)."
             )
         )
 
@@ -161,14 +163,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", str(e))
 
     def _new_profile(self) -> None:
-        engine = QFileDialog.getExistingDirectory(self, "Select Engine Root")
-        if not engine:
-            return
-        project = QFileDialog.getExistingDirectory(self, "Select Project Directory")
-        if not project:
-            return
-        self.profile = Profile(Path(engine), Path(project))
-        self._save_profile_as()
+        dlg = ProfileEditor(parent=self)
+        if dlg.exec():
+            self.profile = dlg.get_profile()
+            self._apply_profile_title()
+            self._save_profile_as()
 
     def _open_profile(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Open Profile", "", "JSON (*.json)")
@@ -176,8 +175,19 @@ class MainWindow(QMainWindow):
             try:
                 self.profile = Profile.load(Path(path))
                 settings.set_profile_path(path)
+                self._apply_profile_title()
             except Exception as e:
                 QMessageBox.critical(self, "Open Error", str(e))
+
+    def _edit_profile(self) -> None:
+        if not self.profile:
+            QMessageBox.information(self, "No Profile", "No profile to edit.")
+            return
+        dlg = ProfileEditor(self.profile, self)
+        if dlg.exec():
+            self.profile = dlg.get_profile()
+            self._apply_profile_title()
+            self._save_profile()
 
     def _save_profile(self) -> None:
         if not getattr(self, "profile", None):
@@ -210,6 +220,7 @@ class MainWindow(QMainWindow):
                 self.profile = Profile.load(Path(path))
             except Exception:
                 self.profile = None
+        self._apply_profile_title()
 
     def _set_theme(self, mode: str) -> None:
         settings.set_theme_mode(mode)
@@ -267,6 +278,12 @@ class MainWindow(QMainWindow):
     def _on_system_theme_change(self) -> None:
         if settings.theme_mode() == "system":
             self._apply_theme("system")
+
+    def _apply_profile_title(self) -> None:
+        if self.profile:
+            self.setWindowTitle(self.profile.display_name())
+        else:
+            self.setWindowTitle("Aegis Toolbelt")
 
     def _log(self, message: str, level: str = "info") -> None:
         colors = {
