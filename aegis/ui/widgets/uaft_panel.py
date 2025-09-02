@@ -29,10 +29,15 @@ from aegis.core.task_runner import TaskRunner
 from aegis.modules.uaft import Uaft
 
 
-DEFAULT_TRACE_ARGS = (
-    "-tracehost=127.0.0.1 -trace=Bookmark,Frame,CPU,GPU,LoadTime,File "
-    "-cpuprofilertrace -statnamedevents -filetrace -loadtimetrace"
-)
+DEFAULT_CMD_FILE = Path(__file__).resolve().parents[3] / "UECommandline.txt"
+if DEFAULT_CMD_FILE.exists():
+    DEFAULT_TRACE_ARGS = DEFAULT_CMD_FILE.read_text(encoding="utf-8").strip()
+else:
+    DEFAULT_TRACE_ARGS = (
+        "-tracehost=127.0.0.1 -trace=Bookmark,Frame,CPU,GPU,LoadTime,File "
+        "-cpuprofilertrace -statnamedevents -filetrace -loadtimetrace"
+    )
+MEMORY_TRACE_HINT = "Add -trace=default,memory for Memory Insights (Dev build)"
 
 
 class UaftPanel(QWidget):
@@ -89,6 +94,8 @@ class UaftPanel(QWidget):
         # Trace args
         self.trace_args = QTextEdit()
         self.trace_args.setPlainText(DEFAULT_TRACE_ARGS)
+        self.trace_args.setPlaceholderText(MEMORY_TRACE_HINT)
+        self.trace_args.setToolTip(MEMORY_TRACE_HINT)
         self.btn_write_cmd = QPushButton("Generate and Push UECommandLine.txt")
 
         # Traces

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from typing import Callable, Optional
+import configparser
+import os
 import sys
+from pathlib import Path
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -57,9 +60,43 @@ class EnvDocPanel(QWidget):
             "JDK": ["Extras", "Android", "JDK"],
             "Vulkan SDK": ["Extras", "Vulkan", "VulkanSDK"],
         }
+        env_vars = {
+            "Android SDK": ["ANDROID_SDK_ROOT", "ANDROID_HOME"],
+            "Android NDK": ["ANDROID_NDK_ROOT", "ANDROID_NDK_HOME"],
+            "JDK": ["JAVA_HOME"],
+            "Vulkan SDK": ["VULKAN_SDK"],
+        }
+        ini_values: dict[str, str] = {}
+        ini_path = (
+            self.profile.engine_root
+            / "Engine"
+            / "Config"
+            / "Android"
+            / "AndroidSDKSettings.ini"
+        )
+        if ini_path.exists():
+            cfg = configparser.ConfigParser()
+            cfg.read(ini_path)
+            if cfg.has_section("AndroidSDKSettings"):
+                sec = cfg["AndroidSDKSettings"]
+                ini_values = {
+                    "Android SDK": sec.get("SDKPath", ""),
+                    "Android NDK": sec.get("NDKPath", ""),
+                    "JDK": sec.get("JavaPath", ""),
+                    "Vulkan SDK": sec.get("VulkanPath", ""),
+                }
 
         for row, (name, parts) in enumerate(components.items()):
-            path = self.profile.engine_root.joinpath(*parts)
+            default = self.profile.engine_root.joinpath(*parts)
+            candidates = [default]
+            ini_val = ini_values.get(name)
+            if ini_val:
+                candidates.append(Path(ini_val))
+            for var in env_vars.get(name, []):
+                p = os.environ.get(var)
+                if p:
+                    candidates.append(Path(p))
+            path = next((p for p in candidates if p.exists()), default)
             self.table.insertRow(row)
             self.table.setItem(row, 0, QTableWidgetItem(name))
             self.table.setItem(row, 1, QTableWidgetItem(str(path)))
