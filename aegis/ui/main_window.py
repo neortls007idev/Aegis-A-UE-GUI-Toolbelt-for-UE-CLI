@@ -36,6 +36,12 @@ from aegis.ui.widgets.help_dialog import HelpDialog
 
 
 LAYOUT_VERSION = 3
+LOG_LABELS = {
+    "info": "Information:",
+    "error": "Error:",
+    "warning": "Warning:",
+    "success": "Success:",
+}
 
 
 class MainWindow(QMainWindow):
@@ -105,9 +111,7 @@ class MainWindow(QMainWindow):
         self.logDock.setWidget(log_container)
         self.logDock.setObjectName("dock_live_log")
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
-        self.logDock.setFeatures(
-            QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetClosable
-        )
+        self.logDock.setFeatures(QDockWidget.DockWidgetMovable)
         self.logDock.setAllowedAreas(Qt.BottomDockWidgetArea)
         self.logDock.setMinimumHeight(120)
         self.logDock.hide()
@@ -154,9 +158,6 @@ class MainWindow(QMainWindow):
         act_echo = QAction("Echo Test Command", self)
         tools_menu.addAction(act_echo)
         act_echo.triggered.connect(self._echo_test)
-        act_logcat = QAction("Logcat Viewer", self)
-        tools_menu.addAction(act_logcat)
-        act_logcat.triggered.connect(self._open_logcat)
 
         profile_menu = self.menuBar().addMenu("&Profile")
         act_new_profile = QAction("New", self)
@@ -302,13 +303,24 @@ class MainWindow(QMainWindow):
 
     def _edit_log_colors(self) -> None:
         cfg = self.log_colors.all()
-        dlg = LogColorsEditor(cfg["levels"], self.log_colors.regex_rules(), self)
+        orig_levels = cfg["levels"]
+        orig_regex = self.log_colors.regex_rules()
+        dlg = LogColorsEditor(
+            orig_levels,
+            orig_regex,
+            self,
+            on_preview=self._preview_log_color,
+        )
         if dlg.exec():
             levels, regex = dlg.get_config()
             for lvl, col in levels.items():
                 self.log_colors.set_level_color(lvl, col)
             self.log_colors.set_regex_rules(regex)
-            self._refresh_log_view()
+        else:
+            for lvl, col in orig_levels.items():
+                self.log_colors.set_level_color(lvl, col)
+            self.log_colors.set_regex_rules(orig_regex)
+        self._refresh_log_view()
 
     def _import_log_colors(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -333,6 +345,10 @@ class MainWindow(QMainWindow):
 
     def _reset_log_colors(self) -> None:
         self.log_colors.reset()
+        self._refresh_log_view()
+
+    def _preview_log_color(self, level: str, color: str) -> None:
+        self.log_colors.set_level_color(level, color)
         self._refresh_log_view()
 
     def _import_key_bindings(self) -> None:
@@ -388,20 +404,6 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
-
-    def _open_logcat(self) -> None:
-        try:
-            subprocess.Popen(
-                ["studio", "logcat"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except OSError as e:
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to launch Android Studio Logcat: {e}",
-            )
 
     def _new_profile(self) -> None:
         dlg = ProfileEditor(parent=self)
@@ -543,7 +545,10 @@ class MainWindow(QMainWindow):
             self.logDock.show()
         if self._log_matches_filters(message, level):
             color = self.log_colors.color_for(message, level)
-            self.log.append(f"<span style='color:{color};'>{ts} {message}</span>")
+            label = LOG_LABELS.get(level, f"{level.title()}:")
+            self.log.append(
+                f"<span style='color:{color};'>{ts} {label} {message}</span>"
+            )
 
     def _clear_log(self) -> None:
         self.log.clear()
@@ -561,7 +566,10 @@ class MainWindow(QMainWindow):
         for ts, message, level in self.log_messages:
             if self._log_matches_filters(message, level):
                 color = self.log_colors.color_for(message, level)
-                self.log.append(f"<span style='color:{color};'>{ts} {message}</span>")
+                label = LOG_LABELS.get(level, f"{level.title()}:")
+                self.log.append(
+                    f"<span style='color:{color};'>{ts} {label} {message}</span>"
+                )
 
     def _task_started(self) -> None:
         self.progress.setVisible(True)

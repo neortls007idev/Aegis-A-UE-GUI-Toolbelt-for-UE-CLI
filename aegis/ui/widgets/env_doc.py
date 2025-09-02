@@ -60,8 +60,8 @@ class EnvDocPanel(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
-        self.test_button = QPushButton("Test SDK")
-        self.test_button.clicked.connect(self._test_sdk)
+        self.test_button = QPushButton("Re-Test all SDKs")
+        self.test_button.clicked.connect(self._retest_sdks)
         layout.addWidget(self.test_button)
 
         self.test_compat_button = QPushButton("Test SDK (Engine Compatibility)")
@@ -73,6 +73,8 @@ class EnvDocPanel(QWidget):
         layout.addWidget(self.fix_button)
 
         self.component_paths: dict[str, Path | None] = {}
+        self.sdk_components = ["Android SDK", "Android NDK", "JDK", "Vulkan SDK"]
+        self.optional_required = {"Vulkan SDK"}
 
     # ----- Profile -----
     def update_profile(self, profile: Optional[Profile]) -> None:
@@ -83,7 +85,26 @@ class EnvDocPanel(QWidget):
     def _detect_version(self, component: str, path: Path) -> tuple[str, QColor | None]:
         """Return version string and optional color for warning."""
         try:
-            if component in {"Android SDK", "Android NDK"}:
+            if component == "Android SDK":
+                platforms = path / "platforms"
+                if platforms.exists():
+                    versions: list[int] = []
+                    for p in platforms.iterdir():
+                        if p.is_dir() and p.name.startswith("android-"):
+                            try:
+                                versions.append(int(p.name.split("-", 1)[1]))
+                            except ValueError:
+                                continue
+                    if versions:
+                        return str(max(versions)), None
+                prop = path / "source.properties"
+                if prop.exists():
+                    for line in prop.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("Pkg.Revision="):
+                            return line.split("=", 1)[1].strip(), None
+            elif component == "Android NDK":
+                if path.name != "ndk":
+                    return path.name, None
                 prop = path / "source.properties"
                 if prop.exists():
                     for line in prop.read_text(encoding="utf-8").splitlines():
@@ -96,9 +117,7 @@ class EnvDocPanel(QWidget):
                         if line.startswith("JAVA_VERSION="):
                             return line.split("=", 1)[1].strip().strip('"'), None
             elif component == "Vulkan SDK":
-                ver_file = path / "version.txt"
-                if ver_file.exists():
-                    return ver_file.read_text(encoding="utf-8").strip(), None
+                return path.name, None
         except Exception:  # pragma: no cover - best effort
             pass
         return "Version Unknown", QColor("#c80")
@@ -155,7 +174,6 @@ class EnvDocPanel(QWidget):
                     "Vulkan SDK": sec.get("VulkanPath", ""),
                 }
 
-        optional_required = {"Vulkan SDK"}
         self.sdk_path = None
         row = 0
         for name, parts in components.items():
@@ -182,7 +200,7 @@ class EnvDocPanel(QWidget):
                 self.sdk_path = path
             self.component_paths[name] = path
             self.table.insertRow(row)
-            display = f"{name} (optional)" if name in optional_required else name
+            display = f"{name} (optional)" if name in self.optional_required else name
             self.table.setItem(row, 0, QTableWidgetItem(display))
             self.table.setItem(row, 1, QTableWidgetItem(str(path)))
             version_item = QTableWidgetItem("")
@@ -198,7 +216,7 @@ class EnvDocPanel(QWidget):
                 status_item.setForeground(QColor("#c80"))
             else:
                 status_item = QTableWidgetItem("Missing")
-                color = "#c80" if name in optional_required else "#a00"
+                color = "#c80" if name in self.optional_required else "#a00"
                 status_item.setForeground(QColor(color))
             self.table.setItem(row, 2, version_item)
             self.table.setItem(row, 3, status_item)
@@ -280,6 +298,23 @@ class EnvDocPanel(QWidget):
             test_btn.clicked.connect(lambda _, comp=name: self._test_component(comp))
             self.table.setCellWidget(row, 4, test_btn)
             row += 1
+
+    def _retest_sdks(self) -> None:
+        self._run_checks()
+        failed = False
+        for name in self.sdk_components:
+            if name in self.optional_required:
+                continue
+            path = self.component_paths.get(name)
+            if not (path and path.is_dir()):
+                failed = True
+                break
+        status = "failed" if failed else "complete"
+        level = "error" if failed else "success"
+        self.log(
+            f"[env] Re-Test SDK installations and Environment variables {status}",
+            level,
+        )
 
     # ----- Fix -----
     def _fix_component(self, component: str) -> None:
@@ -471,7 +506,12 @@ class EnvDocPanel(QWidget):
         if not build_tools.exists() or not any(build_tools.iterdir()):
             self.log("[env] Build-tools missing", "warning")
             all_ok = False
-        if not engine_compat and all_ok:
+        if engine_compat:
+            self.log(
+                f"[env] Engine Compatibility SDK test {'complete' if all_ok else 'failed'}",
+                "success" if all_ok else "error",
+            )
+        elif all_ok:
             self.log("[env] Environment configuration functional", "success")
 
     def _test_component(self, component: str) -> None:
@@ -519,7 +559,7 @@ class EnvDocPanel(QWidget):
         if not scripts:
             return
         script = scripts[0]
-        argv = self._elevated_argv(script)
+        argv = self._elevated_argv(script, ["-noninteractive"])
         self.log(f"[env] {' '.join(argv)}", "info")
 
         def _on_exit(code: int) -> None:
@@ -538,11 +578,13 @@ class EnvDocPanel(QWidget):
         except Exception as e:  # pragma: no cover - subprocess failures
             self.log(f"[env] {e}", "error")
 
-    def _elevated_argv(self, script: Path) -> list[str]:
+    def _elevated_argv(
+        self, script: Path, extra_args: list[str] | None = None
+    ) -> list[str]:
+        extra_args = extra_args or []
         if os.name == "nt":
-            ps_cmd = (
-                f"$p=Start-Process -FilePath '{script}' -Verb RunAs -Wait -PassThru; "
-                "exit $p.ExitCode"
-            )
+            arg_list = ",".join(f"'{a}'" for a in extra_args)
+            args_part = f"-ArgumentList {arg_list} " if extra_args else ""
+            ps_cmd = f"$p=Start-Process -FilePath '{script}' {args_part}-Verb RunAs -Wait -PassThru; exit $p.ExitCode"
             return ["powershell", "-NoProfile", "-Command", ps_cmd]
-        return ["sudo", str(script)]
+        return ["sudo", str(script), *extra_args]
