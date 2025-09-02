@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
-from aegis.core.ini_parser import parse_ini
+from aegis.core.ini_parser import get_value, parse_ini
 from .env_fix_dialog import EnvFixDialog
 
 
@@ -335,12 +335,12 @@ class EnvDocPanel(QWidget):
             self.log("[env] DefaultEngine.ini not found", "error")
             return
         data = parse_ini(cfg_path)
-        section = data.get("/Script/AndroidRuntimeSettings.AndroidRuntimeSettings", {})
-        min_sdk = section.get("MinSDKVersion")
-        target_sdk = section.get("TargetSDKVersion")
-        sdk_override = section.get("SDKAPILevelOverride")
-        ndk_override = section.get("NDKAPILevelOverride")
-        build_tools_req = section.get("BuildToolsVersion")
+        sect = "/Script/AndroidRuntimeSettings.AndroidRuntimeSettings"
+        min_sdk = get_value(data, sect, "MinSDKVersion")
+        target_sdk = get_value(data, sect, "TargetSDKVersion")
+        sdk_override = get_value(data, sect, "SDKAPILevelOverride")
+        ndk_override = get_value(data, sect, "NDKAPILevelOverride")
+        build_tools_req = get_value(data, sect, "BuildToolsVersion")
         platforms = self._find_platforms_dir()
         installed: list[int] = []
         if platforms and platforms.exists():

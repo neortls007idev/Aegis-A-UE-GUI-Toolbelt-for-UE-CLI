@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import dataclass, field
-import configparser
 import threading
 import time
+
+from aegis.core.ini_parser import get_value, parse_ini
 
 
 @dataclass
@@ -42,15 +43,12 @@ class Uaft:
         cfg_path = self._config_path()
         if not cfg_path or not cfg_path.exists():
             return None
-        cfg = configparser.ConfigParser()
-        cfg.read(cfg_path)
+        cfg = parse_ini(cfg_path)
         sec = "/Script/AndroidFileServerEditor.AndroidFileServerRuntimeSettings"
-        if cfg.has_section(sec):
-            token = cfg.get(sec, "SecurityToken", fallback=None)
-            if token and "=" in token:
-                token = token.split("=", 1)[1].strip()
-            return token
-        return None
+        token = get_value(cfg, sec, "SecurityToken")
+        if token and "=" in token:
+            token = token.split("=", 1)[1].strip()
+        return token
 
     def _watch_token(self) -> None:
         while not self._stop_evt.is_set():
