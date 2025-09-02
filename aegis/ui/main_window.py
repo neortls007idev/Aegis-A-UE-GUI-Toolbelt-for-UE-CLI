@@ -126,7 +126,11 @@ class MainWindow(QMainWindow):
             QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
         )
         self.logDock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.TopDockWidgetArea)
-        self.logDock.hide()
+        self.logDock.topLevelChanged.connect(lambda _t: self._reset_log_dock_size())
+        self.logDock.dockLocationChanged.connect(
+            lambda _area: self._reset_log_dock_size()
+        )
+        self._reset_log_dock_size()
 
         self.profile: Profile | None = None
         self.actions: dict[str, QAction] = {}
@@ -142,11 +146,16 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):  # type: ignore[override]
         super().resizeEvent(event)
         self._update_panel_widths()
+        self._reset_log_dock_size()
 
     def _update_panel_widths(self) -> None:
         max_w = int(self.width() * 0.8)
-        self.env_doc.setMaximumWidth(max_w)
-        self.uaft_panel.setMaximumWidth(max_w)
+        self.env_doc.setFixedWidth(max_w)
+        self.uaft_panel.setFixedWidth(max_w)
+
+    def _reset_log_dock_size(self) -> None:
+        self.logDock.setMinimumSize(0, 0)
+        self.logDock.widget().setMinimumSize(0, 0)
 
     # ----- Menus -----
     def _build_menu(self) -> None:
