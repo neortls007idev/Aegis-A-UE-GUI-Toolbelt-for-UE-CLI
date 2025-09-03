@@ -110,7 +110,7 @@ class UaftPanel(QWidget):
 
         # show long paths without exceeding the screen width
         char_width = self.pull_dir.fontMetrics().horizontalAdvance("x")
-        target = char_width * 250
+        target = char_width * 150
         screen = QGuiApplication.primaryScreen()
         if screen:
             max_width = max(0, screen.availableGeometry().width() - 400)
