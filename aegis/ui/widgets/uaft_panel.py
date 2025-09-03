@@ -89,10 +89,12 @@ class UaftPanel(QWidget):
         self.device_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.device_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.device_table.setMinimumHeight(160)
+        self.device_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.pkg_list = QListWidget()
         self.pkg_list.setSelectionMode(QListWidget.SingleSelection)
         self.pkg_list.setMinimumHeight(120)
+        self.pkg_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Trace args
         self.trace_args = QTextEdit()
@@ -134,11 +136,15 @@ class UaftPanel(QWidget):
     # ----- Layout helpers -----
     def _build_layout(self) -> None:
         root = QVBoxLayout(self)
-        root.addWidget(self.uaft_label)
-        root.addWidget(self.build_uaft_btn)
+        paths = QHBoxLayout()
+        paths.addWidget(self.uaft_label)
+        paths.addWidget(self.build_uaft_btn)
+        paths.addSpacing(8)
+        paths.addWidget(self.insights_label)
+        paths.addWidget(self.build_insights_btn)
+        paths.addStretch(1)
+        root.addLayout(paths)
         root.addSpacing(8)
-        root.addWidget(self.insights_label)
-        root.addWidget(self.build_insights_btn)
 
         box_conn = QGroupBox("Connection")
         lc = QVBoxLayout()
@@ -165,8 +171,10 @@ class UaftPanel(QWidget):
             )
         )
         lc.addLayout(self._row([self.btn_list_devices, self.btn_list_packages]))
-        lc.addWidget(self.device_table)
-        lc.addWidget(self.pkg_list)
+        dev_pkg = QHBoxLayout()
+        dev_pkg.addWidget(self.device_table, 1)
+        dev_pkg.addWidget(self.pkg_list, 1)
+        lc.addLayout(dev_pkg)
         box_conn.setLayout(lc)
         root.addWidget(box_conn)
 
