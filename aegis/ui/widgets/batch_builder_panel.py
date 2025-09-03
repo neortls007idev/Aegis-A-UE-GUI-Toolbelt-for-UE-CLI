@@ -21,12 +21,17 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QTableWidget,
     QTableWidgetItem,
+    QDialog,
 )
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.modules.ubt import Ubt
-from aegis.modules.uat import Uat, BUILD_COOK_RUN_SWITCHES
+from aegis.modules.uat import Uat
+from aegis.ui.widgets.manual_override_dialog import (
+    ManualOverrideDialog,
+    BUILD_COOK_RUN_SWITCHES,
+)
 
 
 # Include server and editor configurations by default
@@ -87,13 +92,15 @@ class BatchBuilderPanel(QWidget):
 
         main_layout = QVBoxLayout(self)
 
-        path_layout = QVBoxLayout()
+        path_layout = QHBoxLayout()
         self.ubt_label = QLabel("UBT: (not found)")
         self.ubt_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.uat_label = QLabel("UAT: (not found)")
         self.uat_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         path_layout.addWidget(self.ubt_label)
+        path_layout.addSpacing(8)
         path_layout.addWidget(self.uat_label)
+        path_layout.addStretch(1)
         main_layout.addLayout(path_layout)
 
         layout = QHBoxLayout()
@@ -245,22 +252,17 @@ class BatchBuilderPanel(QWidget):
         ]
 
     def _add_override(self) -> None:
-        switches = sorted(BUILD_COOK_RUN_SWITCHES.keys())
-        switch, ok = QInputDialog.getItem(
-            self, "Manual Override", "Switch:", switches, 0, False
-        )
-        if not ok or not switch:
+        dialog = ManualOverrideDialog(self)
+        if dialog.exec() != QDialog.Accepted:
             return
-        hint = BUILD_COOK_RUN_SWITCHES.get(switch, "")
-        value, ok = QInputDialog.getText(self, "Value", hint)
-        if not ok:
-            return
-        row = self.override_table.rowCount()
-        self.override_table.insertRow(row)
-        self.override_table.setItem(row, 0, QTableWidgetItem(switch))
-        self.override_table.setItem(row, 1, QTableWidgetItem(value))
-        self.override_table.item(row, 0).setToolTip(hint)
-        self.override_table.item(row, 1).setToolTip(hint)
+        for switch, value in dialog.selected_overrides():
+            row = self.override_table.rowCount()
+            self.override_table.insertRow(row)
+            self.override_table.setItem(row, 0, QTableWidgetItem(switch))
+            self.override_table.setItem(row, 1, QTableWidgetItem(value))
+            hint = BUILD_COOK_RUN_SWITCHES.get(switch, "")
+            self.override_table.item(row, 0).setToolTip(hint)
+            self.override_table.item(row, 1).setToolTip(hint)
 
     def _remove_override(self) -> None:
         row = self.override_table.currentRow()
