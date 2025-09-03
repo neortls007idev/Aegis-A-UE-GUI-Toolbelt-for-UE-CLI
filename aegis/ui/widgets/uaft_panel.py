@@ -107,6 +107,7 @@ class UaftPanel(QWidget):
         self.trace_list.setSelectionMode(QListWidget.SingleSelection)
         self.trace_list.setMinimumHeight(160)
         self.pull_dir = QLineEdit()
+
         # show long paths without exceeding the screen width
         char_width = self.pull_dir.fontMetrics().horizontalAdvance("x")
         target = char_width * 250
