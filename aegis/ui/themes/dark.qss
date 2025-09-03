@@ -1,0 +1,5 @@
+QWidget { background: #121212; color: #e9e9e9; }
+QMenuBar, QMenu { background: #1c1c1c; }
+QDockWidget::title { background: #1c1c1c; padding: 6px; }
+QTabBar::tab:selected { font-weight: 600; }
+QStatusBar { background: #1a1a1a; }
