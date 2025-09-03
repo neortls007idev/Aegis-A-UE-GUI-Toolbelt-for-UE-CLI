@@ -61,15 +61,11 @@ class MainWindow(QMainWindow):
         self.env_doc = EnvDocPanel(self.runner, self._log)
         env_container = QWidget()
         env_layout = QVBoxLayout(env_container)
-        env_layout.setAlignment(Qt.AlignTop)
-        env_layout.addWidget(self.env_doc, alignment=Qt.AlignHCenter)
-        env_layout.addStretch(1)
+        env_layout.addWidget(self.env_doc, 1)
         self.uaft_panel = UaftPanel(self.runner, self._log)
         uaft_container = QWidget()
         uaft_layout = QVBoxLayout(uaft_container)
-        uaft_layout.setAlignment(Qt.AlignTop)
-        uaft_layout.addWidget(self.uaft_panel, alignment=Qt.AlignHCenter)
-        uaft_layout.addStretch(1)
+        uaft_layout.addWidget(self.uaft_panel, 1)
         self.tabs.addTab(env_container, "EnvDoc")
         self.tabs.addTab(QTextEdit("Build (stub)"), "Build")
         self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
@@ -84,7 +80,6 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.info_bar)
         central_layout.addWidget(self.tabs)
         self.setCentralWidget(central)
-        self._update_panel_widths()
 
         # Status bar with progress and cancel button
         self.status = QStatusBar()
@@ -153,15 +148,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):  # type: ignore[override]
         super().resizeEvent(event)
-        self._update_panel_widths()
         self._reset_log_dock_size()
-
-    def _update_panel_widths(self) -> None:
-        central_width = (
-            self.centralWidget().width() if self.centralWidget() else self.width()
-        )
-        self.env_doc.setMaximumWidth(central_width)
-        self.uaft_panel.setMaximumWidth(central_width)
 
     def _reset_log_dock_size(self) -> None:
         self.logDock.setMinimumSize(0, 0)
@@ -520,6 +507,8 @@ class MainWindow(QMainWindow):
         g = settings.load_geometry()
         if g:
             self.restoreGeometry(g)
+        else:
+            self.setWindowState(self.windowState() | Qt.WindowMaximized)
         if settings.layout_version() != LAYOUT_VERSION:
             self._reset_layout()
             settings.set_layout_version(LAYOUT_VERSION)
