@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import json
 
@@ -12,12 +12,16 @@ class Profile:
     engine_root: Path
     project_dir: Path
     nickname: str = ""
+    build_configs: list[str] = field(default_factory=list)
+    build_platforms: list[str] = field(default_factory=list)
 
     def save(self, path: Path) -> None:
         data = {
             "engine_root": str(self.engine_root),
             "project_dir": str(self.project_dir),
             "nickname": self.nickname,
+            "build_configs": self.build_configs,
+            "build_platforms": self.build_platforms,
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -28,6 +32,8 @@ class Profile:
             engine_root=Path(data["engine_root"]),
             project_dir=Path(data["project_dir"]),
             nickname=data.get("nickname", ""),
+            build_configs=data.get("build_configs", []),
+            build_platforms=data.get("build_platforms", []),
         )
 
     def display_name(self) -> str:
@@ -35,4 +41,3 @@ class Profile:
         nick = self.nickname.strip()
         proj = self.project_dir.name
         return f"{nick}-{proj}" if nick else proj
-

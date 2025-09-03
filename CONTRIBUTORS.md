@@ -2,6 +2,7 @@
 
 This project exists thanks to the contributions of the following people:
 
+- OpenAI
 - Rahul
 
 ## Contributing
