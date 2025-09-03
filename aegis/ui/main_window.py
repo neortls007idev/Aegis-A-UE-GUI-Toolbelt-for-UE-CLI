@@ -34,6 +34,7 @@ from aegis.ui.widgets.uaft_panel import UaftPanel
 from aegis.ui.widgets.log_colors_editor import LogColorsEditor
 from aegis.ui.widgets.feedback_dialog import FeedbackDialog
 from aegis.ui.widgets.help_dialog import HelpDialog
+from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
 
 
 LAYOUT_VERSION = 4
@@ -56,18 +57,27 @@ class MainWindow(QMainWindow):
         self.runner.started.connect(self._task_started)
         self.runner.finished.connect(lambda _code: self._task_finished())
 
+        self._batch_active = False
+
         # Center tabs
         self.tabs = QTabWidget()
         self.env_doc = EnvDocPanel(self.runner, self._log)
         env_container = QWidget()
         env_layout = QVBoxLayout(env_container)
         env_layout.addWidget(self.env_doc, 1)
+        self.batch_panel = BatchBuilderPanel(self.runner, self._log)
+        self.batch_panel.batch_started.connect(self._batch_started)
+        self.batch_panel.batch_progress.connect(self._batch_progress)
+        self.batch_panel.batch_finished.connect(self._batch_finished)
+        build_container = QWidget()
+        build_layout = QVBoxLayout(build_container)
+        build_layout.addWidget(self.batch_panel, 1)
         self.uaft_panel = UaftPanel(self.runner, self._log)
         uaft_container = QWidget()
         uaft_layout = QVBoxLayout(uaft_container)
         uaft_layout.addWidget(self.uaft_panel, 1)
         self.tabs.addTab(env_container, "EnvDoc")
-        self.tabs.addTab(QTextEdit("Build (stub)"), "Build")
+        self.tabs.addTab(build_container, "Build")
         self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
         self.tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
         self.tabs.addTab(uaft_container, "Devices / UAFT")
@@ -89,7 +99,7 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
         self.cancel_tasks = QPushButton("Cancel All Tasks")
         self.cancel_tasks.setVisible(False)
-        self.cancel_tasks.clicked.connect(self.runner.cancel)
+        self.cancel_tasks.clicked.connect(self._cancel_tasks)
         self.status.addPermanentWidget(self.progress)
         self.status.addPermanentWidget(self.cancel_tasks)
 
@@ -561,6 +571,7 @@ class MainWindow(QMainWindow):
         self._apply_profile_title()
         self.info_bar.update(self.profile, settings.profile_path())
         self.env_doc.update_profile(self.profile)
+        self.batch_panel.update_profile(self.profile)
         self.uaft_panel.update_profile(self.profile)
 
     def _log(self, message: str, level: str = "info") -> None:
@@ -601,8 +612,29 @@ class MainWindow(QMainWindow):
         self.cancel_tasks.setVisible(True)
 
     def _task_finished(self) -> None:
+        if not self._batch_active:
+            self.progress.setVisible(False)
+            self.cancel_tasks.setVisible(False)
+
+    def _batch_started(self, total: int) -> None:
+        self._batch_active = True
+        self.progress.setRange(0, total)
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
+        self.cancel_tasks.setVisible(True)
+
+    def _batch_progress(self, value: int) -> None:
+        self.progress.setValue(value)
+
+    def _batch_finished(self) -> None:
+        self._batch_active = False
         self.progress.setVisible(False)
         self.cancel_tasks.setVisible(False)
+        self.progress.setRange(0, 0)
+
+    def _cancel_tasks(self) -> None:
+        self.runner.cancel()
+        self.batch_panel.cancel_batch()
 
     def closeEvent(self, ev):
         settings.save_geometry(self.saveGeometry())
