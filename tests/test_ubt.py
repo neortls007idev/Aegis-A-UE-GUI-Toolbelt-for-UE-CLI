@@ -32,3 +32,13 @@ def test_engine_path_direct(tmp_path):
     ubt = Ubt(engine_root / "Engine", project_dir)
     argv = ubt.build_argv("MyGame", "Win64", "Development")
     assert argv[0] == str(engine_root / "Engine/Build/BatchFiles/Build.sh")
+
+
+def test_exe_path(tmp_path):
+    engine_root = tmp_path / "UE"
+    (engine_root / "Engine/Build/BatchFiles").mkdir(parents=True)
+    project_dir = tmp_path / "MyGame"
+    project_dir.mkdir()
+    (project_dir / "MyGame.uproject").write_text("", encoding="utf-8")
+    ubt = Ubt(engine_root, project_dir)
+    assert ubt.exe() == engine_root / "Engine/Build/BatchFiles/Build.sh"

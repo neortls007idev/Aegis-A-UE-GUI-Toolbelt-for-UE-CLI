@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Optional, Set
 import shutil
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -19,12 +19,14 @@ from PySide6.QtWidgets import (
     QWidget,
     QProgressBar,
     QAbstractItemView,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.modules.ubt import Ubt
-from aegis.modules.uat import Uat
+from aegis.modules.uat import Uat, BUILD_COOK_RUN_SWITCHES
 
 
 # Include server and editor configurations by default
@@ -83,7 +85,19 @@ class BatchBuilderPanel(QWidget):
         self.current_index = -1
         self.cancel_requested = False
 
-        layout = QHBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+
+        path_layout = QVBoxLayout()
+        self.ubt_label = QLabel("UBT: (not found)")
+        self.ubt_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.uat_label = QLabel("UAT: (not found)")
+        self.uat_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        path_layout.addWidget(self.ubt_label)
+        path_layout.addWidget(self.uat_label)
+        main_layout.addLayout(path_layout)
+
+        layout = QHBoxLayout()
+        main_layout.addLayout(layout)
 
         # ----- Configs -----
         cfg_layout = QVBoxLayout()
@@ -107,6 +121,23 @@ class BatchBuilderPanel(QWidget):
         btn_add_plat.clicked.connect(self._add_platform)
         plat_layout.addWidget(btn_add_plat)
         layout.addLayout(plat_layout)
+
+        # ----- Overrides -----
+        over_layout = QVBoxLayout()
+        over_layout.addWidget(QLabel("Manual Overrides"))
+        self.override_table = QTableWidget(0, 2)
+        self.override_table.setHorizontalHeaderLabels(["Switch", "Value"])
+        self.override_table.horizontalHeader().setStretchLastSection(True)
+        over_layout.addWidget(self.override_table)
+        row = QHBoxLayout()
+        btn_add_override = QPushButton("Add…")
+        btn_add_override.clicked.connect(self._add_override)
+        btn_remove_override = QPushButton("Remove")
+        btn_remove_override.clicked.connect(self._remove_override)
+        row.addWidget(btn_add_override)
+        row.addWidget(btn_remove_override)
+        over_layout.addLayout(row)
+        layout.addLayout(over_layout)
 
         # ----- Actions -----
         act_layout = QVBoxLayout()
@@ -164,12 +195,23 @@ class BatchBuilderPanel(QWidget):
         self.uat = Uat(profile.engine_root, profile.project_dir) if profile else None
         self.config_list.clear()
         self.platform_list.clear()
+        self.override_table.setRowCount(0)
         if not profile:
             cfgs = DEFAULT_CONFIGS
             plats = DEFAULT_PLATFORMS
+            self.ubt_label.setText("UBT: (no profile)")
+            self.uat_label.setText("UAT: (no profile)")
         else:
             cfgs = profile.build_configs or DEFAULT_CONFIGS
             plats = profile.build_platforms or DEFAULT_PLATFORMS
+            try:
+                self.ubt_label.setText(f"UBT: {self.ubt.exe()}")
+            except Exception:
+                self.ubt_label.setText("UBT: (not found)")
+            try:
+                self.uat_label.setText(f"UAT: {self.uat.exe()}")
+            except Exception:
+                self.uat_label.setText("UAT: (not found)")
         for c in cfgs:
             self.config_list.addItem(QListWidgetItem(c))
         for p in plats:
@@ -201,6 +243,46 @@ class BatchBuilderPanel(QWidget):
         return [
             self.platform_list.item(i).text() for i in range(self.platform_list.count())
         ]
+
+    def _add_override(self) -> None:
+        switches = sorted(BUILD_COOK_RUN_SWITCHES.keys())
+        switch, ok = QInputDialog.getItem(
+            self, "Manual Override", "Switch:", switches, 0, False
+        )
+        if not ok or not switch:
+            return
+        hint = BUILD_COOK_RUN_SWITCHES.get(switch, "")
+        value, ok = QInputDialog.getText(self, "Value", hint)
+        if not ok:
+            return
+        row = self.override_table.rowCount()
+        self.override_table.insertRow(row)
+        self.override_table.setItem(row, 0, QTableWidgetItem(switch))
+        self.override_table.setItem(row, 1, QTableWidgetItem(value))
+        self.override_table.item(row, 0).setToolTip(hint)
+        self.override_table.item(row, 1).setToolTip(hint)
+
+    def _remove_override(self) -> None:
+        row = self.override_table.currentRow()
+        if row != -1:
+            self.override_table.removeRow(row)
+
+    def _manual_override_args(self) -> list[str]:
+        args: list[str] = []
+        for row in range(self.override_table.rowCount()):
+            key_item = self.override_table.item(row, 0)
+            if not key_item:
+                continue
+            switch = key_item.text().strip()
+            val_item = self.override_table.item(row, 1)
+            value = val_item.text().strip() if val_item else ""
+            if not switch:
+                continue
+            if value:
+                args.append(f"{switch}={value}")
+            else:
+                args.append(switch)
+        return args
 
     def _allowed_platforms_for_config(self, cfg: str) -> Optional[Set[str]]:
         if cfg.endswith("Editor"):
@@ -257,9 +339,17 @@ class BatchBuilderPanel(QWidget):
         item.setSizeHint(widget.sizeHint())
         self.task_list.addItem(item)
         self.task_list.setItemWidget(item, widget)
-        self.tasks.append(
-            QueuedTask(tag, cfg_item.text(), plat_item.text(), item, widget, bar, clean)
+        task = QueuedTask(
+            tag, cfg_item.text(), plat_item.text(), item, widget, bar, clean
         )
+        try:
+            preview_argv = self._argv_for(task, preview=True)
+            item.setToolTip(" ".join(shlex.quote(a) for a in preview_argv))
+        except Exception as e:
+            self.log(f"[{tag}] {e}", "error")
+            self.task_list.takeItem(self.task_list.row(item))
+            return
+        self.tasks.append(task)
 
     def _move_task(self, delta: int) -> None:
         row = self.task_list.currentRow()
@@ -314,10 +404,20 @@ class BatchBuilderPanel(QWidget):
             self.log(f"[{task.tag}] {e}", "error")
             self._task_done(task, -1)
             return
-        self.log(
-            f"[batch] {' '.join(shlex.quote(a) for a in argv)}",
-            "info",
+        cmd_str = " ".join(shlex.quote(a) for a in argv)
+        cmd_str, ok = QInputDialog.getText(
+            self, "Edit Command", "Command:", text=cmd_str
         )
+        if not ok:
+            self._task_done(task, -1)
+            return
+        try:
+            argv = shlex.split(cmd_str)
+        except ValueError as e:
+            self.log(f"[{task.tag}] {e}", "error")
+            self._task_done(task, -1)
+            return
+        self.log(f"[batch] {' '.join(shlex.quote(a) for a in argv)}", "info")
         try:
             self.runner.start(
                 argv,
@@ -329,7 +429,7 @@ class BatchBuilderPanel(QWidget):
             self.log(f"[{task.tag}] {e}", "error")
             self._task_done(task, -1)
 
-    def _argv_for(self, task: QueuedTask) -> list[str]:
+    def _argv_for(self, task: QueuedTask, preview: bool = False) -> list[str]:
         if not self.profile or not self.ubt:
             raise RuntimeError("No profile loaded")
         if task.tag in {"build", "clean", "rebuild"}:
@@ -339,41 +439,55 @@ class BatchBuilderPanel(QWidget):
         if not self.uat:
             raise RuntimeError("No profile loaded")
         if task.tag == "cook":
-            if task.clean:
+            if task.clean and not preview:
                 self._clean_dir(self.profile.project_dir / "Saved" / "Cooked")
-            return self.uat.buildcookrun_argv(
+            argv = self.uat.buildcookrun_argv(
                 task.platform,
                 task.config,
                 cook=True,
                 skip_build=True,
             )
+            argv += self._manual_override_args()
+            return argv
         if task.tag == "stage":
-            if task.clean:
+            if task.clean and not preview:
                 self._clean_dir(self.profile.project_dir / "Saved" / "Staged")
-            return self.uat.buildcookrun_argv(
+            argv = self.uat.buildcookrun_argv(
                 task.platform,
                 task.config,
                 stage=True,
+                pak=True,
                 skip_build=True,
                 skip_cook=True,
             )
+            argv += self._manual_override_args()
+            return argv
         if task.tag == "package":
-            if task.clean:
+            if task.clean and not preview:
                 self._clean_dir(self.profile.project_dir / "Saved" / "Staged")
-            return self.uat.buildcookrun_argv(
+            argv = self.uat.buildcookrun_argv(
                 task.platform,
                 task.config,
                 package=True,
+                skip_pak=True,
                 skip_build=True,
                 skip_cook=True,
                 skip_stage=True,
             )
+            argv += self._manual_override_args()
+            return argv
         if task.tag == "ddc-build":
-            return self.uat.build_ddc_argv(task.platform)
+            argv = self.uat.build_ddc_argv(task.platform)
+            argv += self._manual_override_args()
+            return argv
         if task.tag == "ddc-clean":
-            return self.uat.build_ddc_argv(task.platform, clean=True)
+            argv = self.uat.build_ddc_argv(task.platform, clean=True)
+            argv += self._manual_override_args()
+            return argv
         if task.tag == "ddc-rebuild":
-            return self.uat.rebuild_ddc_argv(task.platform)
+            argv = self.uat.rebuild_ddc_argv(task.platform)
+            argv += self._manual_override_args()
+            return argv
         return [
             sys.executable,
             "-c",

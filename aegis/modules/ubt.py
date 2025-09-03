@@ -36,6 +36,11 @@ class Ubt:
         self.logger.error(msg)
         raise FileNotFoundError(msg)
 
+    def exe(self) -> Path:
+        """Return the platform-specific UBT executable path."""
+        script_dir = self._engine_dir() / "Build" / "BatchFiles"
+        return script_dir / ("Build.bat" if sys.platform == "win32" else "Build.sh")
+
     def build_argv(
         self,
         target: str,
@@ -43,9 +48,7 @@ class Ubt:
         config: str,
         clean: bool = False,
     ) -> list[str]:
-        script_dir = self._engine_dir() / "Build" / "BatchFiles"
-        script = script_dir / ("Build.bat" if sys.platform == "win32" else "Build.sh")
-        argv = [str(script)]
+        argv = [str(self.exe())]
         if clean:
             argv.append("-clean")
         argv += [
