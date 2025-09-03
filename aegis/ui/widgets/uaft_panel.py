@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from aegis.core.profile import Profile
@@ -105,6 +106,8 @@ class UaftPanel(QWidget):
         self.trace_list.setSelectionMode(QListWidget.SingleSelection)
         self.trace_list.setMinimumHeight(160)
         self.pull_dir = QLineEdit()
+        self.pull_dir.setMinimumContentsLength(250)
+        self.pull_dir.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.pull_base: Path | None = None
         self.btn_choose_dir = QPushButton("Choose Folder…")
         self.chk_auto_path = QCheckBox("Auto path")
