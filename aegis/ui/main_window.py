@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QDockWidget,
+    QBoxLayout,
     QFileDialog,
     QMainWindow,
     QMessageBox,
@@ -118,6 +119,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.log_clear)
         log_layout.addLayout(row)
         log_layout.addWidget(self.log)
+        self.log_controls = row
         self.logDock = QDockWidget("Live Log")
         self.logDock.setWidget(log_container)
         self.logDock.setObjectName("dock_live_log")
@@ -125,7 +127,12 @@ class MainWindow(QMainWindow):
         self.logDock.setFeatures(
             QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
         )
-        self.logDock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.TopDockWidgetArea)
+        self.logDock.setAllowedAreas(
+            Qt.BottomDockWidgetArea
+            | Qt.TopDockWidgetArea
+            | Qt.LeftDockWidgetArea
+            | Qt.RightDockWidgetArea
+        )
         self.logDock.topLevelChanged.connect(lambda _t: self._reset_log_dock_size())
         self.logDock.dockLocationChanged.connect(
             lambda _area: self._reset_log_dock_size()
@@ -150,13 +157,20 @@ class MainWindow(QMainWindow):
         self._reset_log_dock_size()
 
     def _update_panel_widths(self) -> None:
-        max_w = int(self.width() * 0.97)
-        self.env_doc.setFixedWidth(max_w)
-        self.uaft_panel.setFixedWidth(max_w)
+        central_width = (
+            self.centralWidget().width() if self.centralWidget() else self.width()
+        )
+        self.env_doc.setMaximumWidth(central_width)
+        self.uaft_panel.setMaximumWidth(central_width)
 
     def _reset_log_dock_size(self) -> None:
         self.logDock.setMinimumSize(0, 0)
         self.logDock.widget().setMinimumSize(0, 0)
+        area = self.dockWidgetArea(self.logDock)
+        if area in (Qt.LeftDockWidgetArea, Qt.RightDockWidgetArea):
+            self.log_controls.setDirection(QBoxLayout.TopToBottom)
+        else:
+            self.log_controls.setDirection(QBoxLayout.LeftToRight)
 
     # ----- Menus -----
     def _build_menu(self) -> None:
