@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from aegis.core.profile import Profile
@@ -105,6 +107,16 @@ class UaftPanel(QWidget):
         self.trace_list.setSelectionMode(QListWidget.SingleSelection)
         self.trace_list.setMinimumHeight(160)
         self.pull_dir = QLineEdit()
+        # show long paths without exceeding the screen width
+        char_width = self.pull_dir.fontMetrics().horizontalAdvance("x")
+        target = char_width * 250
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            max_width = max(0, screen.availableGeometry().width() - 400)
+            self.pull_dir.setMinimumWidth(min(target, max_width))
+        else:
+            self.pull_dir.setMinimumWidth(target)
+        self.pull_dir.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.pull_base: Path | None = None
         self.btn_choose_dir = QPushButton("Choose Folder…")
         self.chk_auto_path = QCheckBox("Auto path")

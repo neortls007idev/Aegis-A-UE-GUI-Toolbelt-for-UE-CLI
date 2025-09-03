@@ -14,6 +14,7 @@ from typing import Callable, Optional
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog,
+    QHeaderView,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -57,7 +58,17 @@ class EnvDocPanel(QWidget):
                 "Actions",
             ]
         )
-        self.table.horizontalHeader().setStretchLastSection(True)
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        header.resizeSection(0, 200)
+        header.resizeSection(1, 500)
+        header.resizeSection(3, 150)
         layout.addWidget(self.table)
 
         self.test_button = QPushButton("Re-Test all SDKs")
