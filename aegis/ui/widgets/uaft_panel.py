@@ -67,8 +67,11 @@ class UaftPanel(QWidget):
         self.insights_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.build_uaft_btn = QPushButton("Build UAFT")
         self.build_uaft_btn.clicked.connect(self._build_uaft)
-        self.build_insights_btn = QPushButton("Build Unreal Insights")
-        self.build_insights_btn.clicked.connect(self._build_insights)
+        self.rebuild_insights_btn = QPushButton("Rebuild & Fix Unreal Insights")
+        self.rebuild_insights_btn.clicked.connect(self._rebuild_insights)
+        self.launch_insights_btn = QPushButton("Launch Unreal Insights")
+        self.launch_insights_btn.clicked.connect(self._launch_insights)
+        self.launch_insights_btn.setEnabled(False)
 
         # Connection + packages
         self.security_token = QLineEdit()
@@ -131,7 +134,6 @@ class UaftPanel(QWidget):
         self._build_layout()
         self._connect_signals()
         self.build_uaft_btn.hide()
-        self.build_insights_btn.hide()
 
     # ----- Layout helpers -----
     def _build_layout(self) -> None:
@@ -141,7 +143,8 @@ class UaftPanel(QWidget):
         paths.addWidget(self.build_uaft_btn)
         paths.addSpacing(8)
         paths.addWidget(self.insights_label)
-        paths.addWidget(self.build_insights_btn)
+        paths.addWidget(self.rebuild_insights_btn)
+        paths.addWidget(self.launch_insights_btn)
         paths.addStretch(1)
         root.addLayout(paths)
         root.addSpacing(8)
@@ -266,7 +269,7 @@ class UaftPanel(QWidget):
             self.uaft_label.setText("UAFT: (no profile)")
             self.insights_label.setText("Unreal Insights: (no profile)")
             self.build_uaft_btn.hide()
-            self.build_insights_btn.hide()
+            self.launch_insights_btn.setEnabled(False)
             return
 
         engine_root = self.profile.engine_root
@@ -291,7 +294,7 @@ class UaftPanel(QWidget):
             else "Unreal Insights: (not found)"
         )
         self.build_uaft_btn.setVisible(self.uaft_path is None)
-        self.build_insights_btn.setVisible(self.insights_path is None)
+        self.launch_insights_btn.setEnabled(self.insights_path is not None)
 
     # ----- Helpers -----
     def _require_uaft(self) -> Uaft | None:
@@ -526,16 +529,22 @@ class UaftPanel(QWidget):
         if self.chk_open_insights.isChecked() and self.insights_path:
             self._open_insights(local)
 
-    def _open_insights(self, trace_path: Path) -> None:
+    def _open_insights(self, trace_path: Path | None = None) -> None:
         exe = self.insights_path
         if not exe or not exe.exists():
             self.log("[insights] Unreal Insights not found", "error")
             return
+        argv = [str(exe)]
+        if trace_path:
+            argv.append(str(trace_path))
         try:
-            subprocess.Popen([str(exe), str(trace_path)], shell=False)
+            subprocess.Popen(argv, shell=False)
             self.log("[insights] Launched Unreal Insights", "info")
         except Exception as e:  # pragma: no cover - external tool failures
             self.log(f"[insights] {e}", "error")
+
+    def _launch_insights(self) -> None:
+        self._open_insights()
 
     # ----- Build -----
     def _build_uaft(self) -> None:
@@ -547,9 +556,9 @@ class UaftPanel(QWidget):
             self.profile.engine_root / "Engine" / "Build" / "BatchFiles" / script_name
         )
         argv = [str(script), "BuildUAFT"]
-        self._run(argv, "uaft")
+        self._run(argv, "uaft", on_exit=lambda _code: self._scan())
 
-    def _build_insights(self) -> None:
+    def _rebuild_insights(self) -> None:
         if not self.profile:
             self.log("[insights] No profile selected", "error")
             return
@@ -558,18 +567,24 @@ class UaftPanel(QWidget):
             self.profile.engine_root / "Engine" / "Build" / "BatchFiles" / script_name
         )
         argv = [str(script), "BuildUnrealInsights"]
-        self._run(argv, "insights")
+        self._run(argv, "insights", on_exit=lambda _code: self._scan())
 
-    def _run(self, argv: list[str], tag: str) -> None:
+    def _run(
+        self, argv: list[str], tag: str, on_exit: Callable[[int], None] | None = None
+    ) -> None:
         self.log(f"[{tag}] {' '.join(argv)}", "info")
+
+        def handle_exit(code: int) -> None:
+            self.log(f"[{tag}] exit code {code}", "success" if code == 0 else "error")
+            if on_exit:
+                on_exit(code)
+
         try:
             self.runner.start(
                 argv,
                 on_stdout=lambda s: self.log(f"[{tag}] {s}", "info"),
                 on_stderr=lambda s: self.log(f"[{tag}] {s}", "error"),
-                on_exit=lambda code: self.log(
-                    f"[{tag}] exit code {code}", "success" if code == 0 else "error"
-                ),
+                on_exit=handle_exit,
             )
         except Exception as e:  # pragma: no cover - subprocess failures
             self.log(f"[{tag}] {e}", "error")

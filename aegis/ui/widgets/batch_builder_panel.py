@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QDialog,
+    QCheckBox,
 )
 
 from aegis.core.profile import Profile
@@ -63,6 +64,7 @@ class QueuedTask:
     item: QListWidgetItem
     widget: QWidget
     bar: QProgressBar
+    edit: QCheckBox
     clean: bool = False
     cmd_override: str | None = None
 
@@ -277,10 +279,12 @@ class BatchBuilderPanel(QWidget):
             if not key_item:
                 continue
             switch = key_item.text().strip()
-            val_item = self.override_table.item(row, 1)
-            value = val_item.text().strip() if val_item else ""
             if not switch:
                 continue
+            # Ensure switches use the "-switch=value" form
+            switch = "-" + switch.lstrip("-").split("=")[0]
+            val_item = self.override_table.item(row, 1)
+            value = val_item.text().strip() if val_item else ""
             if value:
                 args.append(f"{switch}={value}")
             else:
@@ -330,6 +334,9 @@ class BatchBuilderPanel(QWidget):
             clean = mode == "Clean"
         widget = QWidget()
         row = QHBoxLayout(widget)
+        edit_chk = QCheckBox("Edit")
+        edit_chk.setToolTip("Edit command before running")
+        row.addWidget(edit_chk)
         label = f"{tag} {cfg_item.text()} {plat_item.text()}"
         if clean:
             label += " (clean)"
@@ -343,7 +350,7 @@ class BatchBuilderPanel(QWidget):
         self.task_list.addItem(item)
         self.task_list.setItemWidget(item, widget)
         task = QueuedTask(
-            tag, cfg_item.text(), plat_item.text(), item, widget, bar, clean
+            tag, cfg_item.text(), plat_item.text(), item, widget, bar, edit_chk, clean
         )
         try:
             preview_argv = self._argv_for(task, preview=True)
@@ -407,6 +414,27 @@ class BatchBuilderPanel(QWidget):
     def _start_batch(self) -> None:
         if self.current_index != -1 or not self.tasks:
             return
+        for task in self.tasks:
+            if task.edit.isChecked():
+                try:
+                    preview_argv = self._argv_for(task, preview=True)
+                    default_cmd = task.cmd_override or " ".join(
+                        shlex.quote(a) for a in preview_argv
+                    )
+                except Exception as e:
+                    self.log(f"[{task.tag}] {e}", "error")
+                    return
+                cmd, ok = QInputDialog.getMultiLineText(
+                    self, "Edit Command", "Command:", default_cmd
+                )
+                if not ok:
+                    return
+                task.cmd_override = cmd.strip() or None
+                if task.cmd_override:
+                    task.item.setToolTip(task.cmd_override)
+                else:
+                    task.item.setToolTip(default_cmd)
+                task.edit.setChecked(False)
         self.current_index = -1
         self.cancel_requested = False
         self.batch_started.emit(len(self.tasks))
