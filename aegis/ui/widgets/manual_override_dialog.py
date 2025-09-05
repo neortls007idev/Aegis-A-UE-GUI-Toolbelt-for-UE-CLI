@@ -236,11 +236,14 @@ class ManualOverrideDialog(QDialog):
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Use", "Switch", "Description", "Value"])
         self.table.verticalHeader().setVisible(False)
+        self.table.setWordWrap(True)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        fm = self.table.fontMetrics()
+        self.table.verticalHeader().setDefaultSectionSize(fm.lineSpacing() * 3)
         layout.addWidget(self.table)
 
         for row, switch in enumerate(sorted(BUILD_COOK_RUN_SWITCHES)):
@@ -257,7 +260,7 @@ class ManualOverrideDialog(QDialog):
             self.table.setCellWidget(row, 3, val)
 
         self.table.resizeColumnsToContents()
-        self.resize(900, 600)
+        self.resize(1100, 700)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
