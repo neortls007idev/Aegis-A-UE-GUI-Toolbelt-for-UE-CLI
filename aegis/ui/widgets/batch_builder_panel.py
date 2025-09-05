@@ -278,13 +278,20 @@ class BatchBuilderPanel(QWidget):
             key_item = self.override_table.item(row, 0)
             if not key_item:
                 continue
-            switch = key_item.text().strip()
-            if not switch:
+            switch_text = key_item.text().strip()
+            if not switch_text:
                 continue
-            # Ensure switches use the "-switch=value" form
-            switch = "-" + switch.lstrip("-").split("=")[0]
+            # Normalize to "-switch" and allow an inline "-switch=value" pattern
+            inline_value = ""
+            if "=" in switch_text:
+                switch_part, inline_value = switch_text.split("=", 1)
+            else:
+                switch_part = switch_text
+            switch = "-" + switch_part.lstrip("-")
             val_item = self.override_table.item(row, 1)
             value = val_item.text().strip() if val_item else ""
+            if not value:
+                value = inline_value.strip()
             if value:
                 args.append(f"{switch}={value}")
             else:
