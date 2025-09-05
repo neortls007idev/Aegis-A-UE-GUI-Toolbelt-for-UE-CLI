@@ -12,8 +12,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from aegis.ui.widgets.tooltip_icon import TooltipIcon
-
 
 BUILD_COOK_RUN_SWITCHES: dict[str, str] = {
     "-project": (
@@ -251,8 +249,9 @@ class ManualOverrideDialog(QDialog):
             chk = QCheckBox()
             self.table.setCellWidget(row, 0, chk)
             self.table.setItem(row, 1, QTableWidgetItem(switch))
-            tip = TooltipIcon(hint)
-            self.table.setCellWidget(row, 2, tip)
+            desc_item = QTableWidgetItem(hint)
+            desc_item.setToolTip(hint)
+            self.table.setItem(row, 2, desc_item)
             val = QLineEdit()
             val.setToolTip(hint)
             self.table.setCellWidget(row, 3, val)
