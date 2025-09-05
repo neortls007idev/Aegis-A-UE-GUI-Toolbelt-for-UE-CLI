@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMessageBox,
+    QMenu,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -21,11 +22,18 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QLineEdit,
     QComboBox,
+    QPlainTextEdit,
 )
 
 from aegis.core.profile import Profile
 from aegis.core.settings import settings
 from aegis.core.task_runner import TaskRunner
+from aegis.core.app_preferences import (
+    list_profiles,
+    list_themes,
+    list_log_colors,
+    list_keybindings,
+)
 from aegis.ui.widgets.profile_editor import ProfileEditor
 from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
 from aegis.ui.widgets.env_doc import EnvDocPanel
@@ -69,9 +77,19 @@ class MainWindow(QMainWindow):
         self.batch_panel.batch_started.connect(self._batch_started)
         self.batch_panel.batch_progress.connect(self._batch_progress)
         self.batch_panel.batch_finished.connect(self._batch_finished)
+        self.command_edit = QPlainTextEdit()
+        self.command_edit.textChanged.connect(self._command_preview_changed)
+        build_tabs = QTabWidget()
+        build_tabs.addTab(self.batch_panel, "Tasks")
+        build_tabs.addTab(self.command_edit, "Preview")
+        self.batch_panel.task_list.currentRowChanged.connect(
+            self._update_command_preview
+        )
+        self._update_command_preview(self.batch_panel.task_list.currentRow())
         build_container = QWidget()
         build_layout = QVBoxLayout(build_container)
-        build_layout.addWidget(self.batch_panel, 1)
+        build_layout.addWidget(build_tabs, 1)
+        self.build_tabs = build_tabs
         self.uaft_panel = UaftPanel(self.runner, self._log)
         uaft_container = QWidget()
         uaft_layout = QVBoxLayout(uaft_container)
@@ -169,6 +187,17 @@ class MainWindow(QMainWindow):
         else:
             self.log_controls.setDirection(QBoxLayout.LeftToRight)
 
+    def _update_command_preview(self, row: int) -> None:
+        cmd = self.batch_panel.command_preview(row)
+        self.command_edit.blockSignals(True)
+        self.command_edit.setPlainText(cmd)
+        self.command_edit.blockSignals(False)
+
+    def _command_preview_changed(self) -> None:
+        row = self.batch_panel.task_list.currentRow()
+        if row != -1:
+            self.batch_panel.set_command_override(row, self.command_edit.toPlainText())
+
     # ----- Menus -----
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -209,6 +238,7 @@ class MainWindow(QMainWindow):
         profile_menu.addAction(act_edit_profile)
         act_edit_profile.triggered.connect(self._edit_profile)
         self.actions["profile.edit"] = act_edit_profile
+        self._populate_profile_menu(profile_menu)
 
         settings_menu = self.menuBar().addMenu("&Settings")
         theme_menu = settings_menu.addMenu("Load Theme…")
@@ -224,6 +254,7 @@ class MainWindow(QMainWindow):
         act_custom = QAction("Create Custom", self)
         theme_menu.addAction(act_custom)
         act_custom.triggered.connect(self._create_custom_theme)
+        self._populate_theme_menu(theme_menu)
 
         log_menu = settings_menu.addMenu("Log Colors")
         act_edit_log = QAction("Edit…", self)
@@ -242,6 +273,7 @@ class MainWindow(QMainWindow):
         log_menu.addAction(act_reset_log)
         act_reset_log.triggered.connect(self._reset_log_colors)
         self.actions["settings.log_colors.reset"] = act_reset_log
+        self._populate_log_colors_menu(log_menu)
 
         kb_menu = settings_menu.addMenu("Key Bindings")
         act_edit_keys = QAction("Edit…", self)
@@ -256,6 +288,7 @@ class MainWindow(QMainWindow):
         act_reset_keys = QAction("Reset to Defaults", self)
         kb_menu.addAction(act_reset_keys)
         act_reset_keys.triggered.connect(self._reset_key_bindings)
+        self._populate_keybindings_menu(kb_menu)
 
         help_menu = self.menuBar().addMenu("&Help")
         act_help = QAction("Help", self)
@@ -272,6 +305,50 @@ class MainWindow(QMainWindow):
         help_menu.addAction(act_about)
         act_about.triggered.connect(self._show_about)
         self.actions["help.about"] = act_about
+
+    def _populate_profile_menu(self, menu: QMenu) -> None:
+        paths = list_profiles()
+        if paths:
+            menu.addSeparator()
+            for path in paths:
+                act = QAction(path.stem, self)
+                act.triggered.connect(
+                    lambda _checked=False, p=path: self._open_profile_file(p)
+                )
+                menu.addAction(act)
+
+    def _populate_theme_menu(self, menu: QMenu) -> None:
+        paths = list_themes()
+        if paths:
+            menu.addSeparator()
+            for path in paths:
+                act = QAction(path.stem, self)
+                act.triggered.connect(
+                    lambda _checked=False, p=path: self._load_theme_file(p)
+                )
+                menu.addAction(act)
+
+    def _populate_log_colors_menu(self, menu: QMenu) -> None:
+        paths = list_log_colors()
+        if paths:
+            menu.addSeparator()
+            for path in paths:
+                act = QAction(path.stem, self)
+                act.triggered.connect(
+                    lambda _checked=False, p=path: self._load_log_colors_file(p)
+                )
+                menu.addAction(act)
+
+    def _populate_keybindings_menu(self, menu: QMenu) -> None:
+        paths = list_keybindings()
+        if paths:
+            menu.addSeparator()
+            for path in paths:
+                act = QAction(path.stem, self)
+                act.triggered.connect(
+                    lambda _checked=False, p=path: self._load_key_bindings_file(p)
+                )
+                menu.addAction(act)
 
     def _show_help(self) -> None:
         readme = Path(__file__).resolve().parents[2] / "README.md"
@@ -380,6 +457,13 @@ class MainWindow(QMainWindow):
         self.log_colors.reset()
         self._refresh_log_view()
 
+    def _load_log_colors_file(self, path: Path) -> None:
+        try:
+            self.log_colors.import_json(str(path))
+            self._refresh_log_view()
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", str(e))
+
     def _preview_log_color(self, level: str, color: str) -> None:
         self.log_colors.set_level_color(level, color)
         self._refresh_log_view()
@@ -408,6 +492,13 @@ class MainWindow(QMainWindow):
     def _reset_key_bindings(self) -> None:
         settings.key_bindings.reset()
         self._apply_key_bindings()
+
+    def _load_key_bindings_file(self, path: Path) -> None:
+        try:
+            settings.key_bindings.import_json(str(path))
+            self._apply_key_bindings()
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", str(e))
 
     # ----- Actions -----
     def _new_window(self):
@@ -454,6 +545,14 @@ class MainWindow(QMainWindow):
                 self._profile_changed()
             except Exception as e:
                 QMessageBox.critical(self, "Open Error", str(e))
+
+    def _open_profile_file(self, path: Path) -> None:
+        try:
+            self.profile = Profile.load(path)
+            settings.set_profile_path(str(path))
+            self._profile_changed()
+        except Exception as e:
+            QMessageBox.critical(self, "Open Error", str(e))
 
     def _edit_profile(self) -> None:
         if not self.profile:
@@ -508,6 +607,14 @@ class MainWindow(QMainWindow):
         try:
             settings.set_theme_mode("custom")
             settings.set_custom_theme_path(path)
+            self._apply_theme()
+        except Exception as e:
+            QMessageBox.critical(self, "Theme Error", str(e))
+
+    def _load_theme_file(self, path: Path) -> None:
+        try:
+            settings.set_theme_mode("custom")
+            settings.set_custom_theme_path(str(path))
             self._apply_theme()
         except Exception as e:
             QMessageBox.critical(self, "Theme Error", str(e))

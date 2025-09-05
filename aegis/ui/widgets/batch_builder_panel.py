@@ -64,6 +64,7 @@ class QueuedTask:
     widget: QWidget
     bar: QProgressBar
     clean: bool = False
+    cmd_override: str | None = None
 
 
 class BatchBuilderPanel(QWidget):
@@ -378,6 +379,31 @@ class BatchBuilderPanel(QWidget):
         self.tasks.pop(row)
         self.task_list.takeItem(row)
 
+    def command_preview(self, row: int) -> str:
+        if row < 0 or row >= len(self.tasks):
+            return ""
+        task = self.tasks[row]
+        try:
+            argv = self._argv_for(task, preview=True)
+        except Exception:
+            return ""
+        cmd = " ".join(shlex.quote(a) for a in argv)
+        return task.cmd_override or cmd
+
+    def set_command_override(self, row: int, cmd: str | None) -> None:
+        if row < 0 or row >= len(self.tasks):
+            return
+        task = self.tasks[row]
+        task.cmd_override = cmd or None
+        if task.cmd_override:
+            task.item.setToolTip(task.cmd_override)
+        else:
+            try:
+                argv = self._argv_for(task, preview=True)
+                task.item.setToolTip(" ".join(shlex.quote(a) for a in argv))
+            except Exception:
+                task.item.setToolTip("")
+
     def _start_batch(self) -> None:
         if self.current_index != -1 or not self.tasks:
             return
@@ -400,26 +426,23 @@ class BatchBuilderPanel(QWidget):
             return
         task = self.tasks[self.current_index]
         task.bar.setRange(0, 0)
-        try:
-            argv = self._argv_for(task)
-        except Exception as e:
-            self.log(f"[{task.tag}] {e}", "error")
-            self._task_done(task, -1)
-            return
-        cmd_str = " ".join(shlex.quote(a) for a in argv)
-        cmd_str, ok = QInputDialog.getText(
-            self, "Edit Command", "Command:", text=cmd_str
-        )
-        if not ok:
-            self._task_done(task, -1)
-            return
-        try:
-            argv = shlex.split(cmd_str)
-        except ValueError as e:
-            self.log(f"[{task.tag}] {e}", "error")
-            self._task_done(task, -1)
-            return
-        self.log(f"[batch] {' '.join(shlex.quote(a) for a in argv)}", "info")
+        if task.cmd_override:
+            cmd_str = task.cmd_override
+            try:
+                argv = shlex.split(cmd_str)
+            except ValueError as e:
+                self.log(f"[{task.tag}] {e}", "error")
+                self._task_done(task, -1)
+                return
+        else:
+            try:
+                argv = self._argv_for(task)
+            except Exception as e:
+                self.log(f"[{task.tag}] {e}", "error")
+                self._task_done(task, -1)
+                return
+            cmd_str = " ".join(shlex.quote(a) for a in argv)
+        self.log(f"[batch] {cmd_str}", "info")
         try:
             self.runner.start(
                 argv,

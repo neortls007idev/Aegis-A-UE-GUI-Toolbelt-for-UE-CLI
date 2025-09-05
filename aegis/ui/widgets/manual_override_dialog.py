@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QHeaderView,
     QLineEdit,
     QTableWidget,
     QTableWidgetItem,
@@ -237,7 +238,11 @@ class ManualOverrideDialog(QDialog):
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Use", "Switch", "Description", "Value"])
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
         layout.addWidget(self.table)
 
         for row, switch in enumerate(sorted(BUILD_COOK_RUN_SWITCHES)):
@@ -252,6 +257,8 @@ class ManualOverrideDialog(QDialog):
             val.setToolTip(hint)
             self.table.setCellWidget(row, 3, val)
 
+        self.table.resizeColumnsToContents()
+        self.resize(900, 600)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
