@@ -72,6 +72,35 @@ PYTHONPATH=$PWD pytest
 
 See `CODING_STANDARDS.md` for naming conventions and guardrails.
 
+## PyInstaller builds
+
+The [release workflow](.github/workflows/release.yml) packages the app with
+PyInstaller. The same command can be run locally to produce standalone
+executables in the `dist/` folder.
+
+### macOS
+
+Install Xcode command line tools and ensure Python 3.11 is available:
+
+```bash
+xcode-select --install  # first-time setup
+pip install -r requirements.txt pyinstaller
+pyinstaller -F -n Aegis --add-data "aegis/ui/themes:ui/themes" aegis/app.py
+```
+
+### Linux (Debian/Ubuntu)
+
+Install build tools and Qt libraries required by PySide6:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential libglib2.0-0 libglu1-mesa libxkbcommon-x11-0 libxcb-cursor0
+pip install -r requirements.txt pyinstaller
+pyinstaller -F -n Aegis --add-data "aegis/ui/themes:ui/themes" aegis/app.py
+```
+
+The generated binary is placed in `dist/`.
+
 ## CI/CD
 
 GitHub Actions runs `ruff check`, `black --check`, `mypy`, and `PYTHONPATH=$PWD pytest` on pushes to `main`, `dev`, `feat/**`, and `maintenance/**` branches. Codex/AI agents and contributors must add or update unit and functional tests for new behavior and keep workflows, dependencies, and tooling in sync so the pipeline stays green.
