@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from aegis.core.settings import settings
+from aegis.core.preferences import preferences
 from aegis.core.task_runner import TaskRunner
 from aegis.ui.key_binding_actions import KeyBindingActions
 from aegis.ui.profile_actions import ProfileActions
@@ -46,8 +47,12 @@ from aegis.ui.menu_builder import build_menu
 class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
     def __init__(self) -> None:
         super().__init__()
+        self.prefs = preferences
         self.setWindowTitle("Aegis Toolbelt")
-        self.resize(1280, 800)
+        if self.prefs.allow_resizing:
+            self.resize(self.prefs.width, self.prefs.height)
+        else:
+            self.setFixedSize(self.prefs.width, self.prefs.height)
 
         # Runner
         self.runner = TaskRunner()
@@ -111,7 +116,7 @@ class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
         self.status.addPermanentWidget(self.cancel_tasks)
 
         # Dock: Live Log
-        self.log_panel = LogPanel(self)
+        self.log_panel = LogPanel(self, dockable=self.prefs.allow_docking)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.log_panel)
 
         self.profile = None
@@ -291,6 +296,37 @@ class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
         self.batch_panel.cancel_batch()
 
     def closeEvent(self, ev):  # type: ignore[override]
+        if self.prefs.allow_resizing and not self.isMaximized():
+            self.prefs.width = self.width()
+            self.prefs.height = self.height()
+        self.prefs.save()
         settings.save_geometry(self.saveGeometry())
         settings.save_state(self.saveState())
         super().closeEvent(ev)
+
+    def _toggle_docking(self, checked: bool) -> None:
+        self.prefs.allow_docking = checked
+        self.log_panel.set_dockable(checked)
+        self.prefs.save()
+
+    def _toggle_resizing(self, checked: bool) -> None:
+        self.prefs.allow_resizing = checked
+        if checked:
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
+            self.resize(self.prefs.width, self.prefs.height)
+        else:
+            self.prefs.width = self.width()
+            self.prefs.height = self.height()
+            self.setFixedSize(self.width(), self.height())
+        self.prefs.save()
+
+    def _toggle_maximized(self, checked: bool) -> None:
+        self.prefs.launch_maximized = checked
+        if checked:
+            self.showMaximized()
+        else:
+            self.showNormal()
+            if self.prefs.allow_resizing:
+                self.resize(self.prefs.width, self.prefs.height)
+        self.prefs.save()

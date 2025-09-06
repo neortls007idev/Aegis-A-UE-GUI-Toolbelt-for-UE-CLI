@@ -28,7 +28,9 @@ LOG_LABELS = {
 
 
 class LogPanel(QDockWidget):
-    def __init__(self, parent: QMainWindow | None = None) -> None:
+    def __init__(
+        self, parent: QMainWindow | None = None, dockable: bool = True
+    ) -> None:
         super().__init__("Live Log", parent)
         self.setObjectName("dock_live_log")
         self.log_colors = settings.log_colors
@@ -59,15 +61,7 @@ class LogPanel(QDockWidget):
         self.controls = row
         self.setWidget(container)
 
-        self.setFeatures(
-            QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
-        )
-        self.setAllowedAreas(
-            Qt.BottomDockWidgetArea
-            | Qt.TopDockWidgetArea
-            | Qt.LeftDockWidgetArea
-            | Qt.RightDockWidgetArea
-        )
+        self.set_dockable(dockable)
         self.topLevelChanged.connect(lambda _: self.reset_size())
         self.dockLocationChanged.connect(lambda _: self.reset_size())
         self.reset_size()
@@ -117,3 +111,18 @@ class LogPanel(QDockWidget):
             self.controls.setDirection(QBoxLayout.TopToBottom)
         else:
             self.controls.setDirection(QBoxLayout.LeftToRight)
+
+    def set_dockable(self, dockable: bool) -> None:
+        if dockable:
+            self.setFeatures(
+                QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
+            )
+            self.setAllowedAreas(
+                Qt.BottomDockWidgetArea
+                | Qt.TopDockWidgetArea
+                | Qt.LeftDockWidgetArea
+                | Qt.RightDockWidgetArea
+            )
+        else:
+            self.setFeatures(QDockWidget.NoDockWidgetFeatures)
+            self.setAllowedAreas(Qt.NoDockWidgetArea)

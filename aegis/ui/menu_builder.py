@@ -110,6 +110,28 @@ def build_menu(window: QMainWindow) -> dict[str, QAction]:
     act_reset_keys.triggered.connect(window._reset_key_bindings)
     _populate_keybindings_menu(window, kb_menu)
 
+    prefs_menu = settings_menu.addMenu("Preferences")
+    act_docking = QAction("Allow Docking", window)
+    act_docking.setCheckable(True)
+    act_docking.setChecked(window.prefs.allow_docking)
+    prefs_menu.addAction(act_docking)
+    act_docking.toggled.connect(window._toggle_docking)
+    actions["settings.preferences.docking"] = act_docking
+
+    act_resizing = QAction("Allow Resizing", window)
+    act_resizing.setCheckable(True)
+    act_resizing.setChecked(window.prefs.allow_resizing)
+    prefs_menu.addAction(act_resizing)
+    act_resizing.toggled.connect(window._toggle_resizing)
+    actions["settings.preferences.resizing"] = act_resizing
+
+    act_maximized = QAction("Launch Maximized", window)
+    act_maximized.setCheckable(True)
+    act_maximized.setChecked(window.prefs.launch_maximized)
+    prefs_menu.addAction(act_maximized)
+    act_maximized.toggled.connect(window._toggle_maximized)
+    actions["settings.preferences.launch_maximized"] = act_maximized
+
     help_menu = menu_bar.addMenu("&Help")
     act_help = QAction("Help", window)
     help_menu.addAction(act_help)
