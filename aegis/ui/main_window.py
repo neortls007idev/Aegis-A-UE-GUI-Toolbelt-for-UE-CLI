@@ -191,8 +191,9 @@ class MainWindow(QMainWindow):
         else:
             self.log_controls.setDirection(QBoxLayout.LeftToRight)
 
-    def _refresh_command_edit(self) -> None:
-        cmds = self.batch_panel.all_command_previews()
+    def _refresh_command_edit(self, cmds: list[str] | None = None) -> None:
+        if cmds is None:
+            cmds = self.batch_panel.all_command_previews()
         self.command_edit.blockSignals(True)
         self.command_edit.setRowCount(len(cmds))
         for i, cmd in enumerate(cmds):
@@ -219,7 +220,7 @@ class MainWindow(QMainWindow):
     def _command_preview_changed(self, item: QTableWidgetItem) -> None:
         row = item.row()
         col = item.column()
-        if col != 1:
+        if col != 2:
             return
         cmd = item.text().strip()
         if self.batch_panel.task_is_editable(row):
@@ -228,7 +229,8 @@ class MainWindow(QMainWindow):
             self.command_edit.blockSignals(True)
             item.setText(self.batch_panel.command_preview(row))
             self.command_edit.blockSignals(False)
-        self.batch_panel.tasks_changed.emit()
+        cmds = self.batch_panel.all_command_previews()
+        self._refresh_command_edit(cmds)
 
     # ----- Menus -----
     def _build_menu(self) -> None:
