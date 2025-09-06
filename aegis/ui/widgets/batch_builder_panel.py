@@ -85,6 +85,7 @@ class BatchBuilderPanel(QWidget):
     batch_started = Signal(int)
     batch_progress = Signal(int)
     batch_finished = Signal()
+    tasks_changed = Signal()
 
     def __init__(
         self,
@@ -361,6 +362,8 @@ class BatchBuilderPanel(QWidget):
         widget = QWidget()
         row = QHBoxLayout(widget)
         edit_chk = QCheckBox("Edit")
+        edit_chk.setAutoExclusive(False)
+        edit_chk.setTristate(False)
         if tag not in EDITABLE_TAGS:
             edit_chk.setEnabled(False)
             edit_chk.setToolTip("Manual edit not available")
@@ -390,6 +393,7 @@ class BatchBuilderPanel(QWidget):
             self.task_list.takeItem(self.task_list.row(item))
             return
         self.tasks.append(task)
+        self.tasks_changed.emit()
 
     def _move_task(self, delta: int) -> None:
         row = self.task_list.currentRow()
@@ -408,6 +412,7 @@ class BatchBuilderPanel(QWidget):
         self.task_list.insertItem(new_row, item)
         self.task_list.setItemWidget(item, task.widget)
         self.task_list.setCurrentRow(new_row)
+        self.tasks_changed.emit()
 
     def _remove_task(self) -> None:
         row = self.task_list.currentRow()
@@ -415,6 +420,13 @@ class BatchBuilderPanel(QWidget):
             return
         self.tasks.pop(row)
         self.task_list.takeItem(row)
+        self.tasks_changed.emit()
+
+    def _check_all_edits(self) -> None:
+        """Tick edit boxes for all editable tasks."""
+        for task in self.tasks:
+            if task.edit.isEnabled():
+                task.edit.setChecked(True)
 
     def _check_all_edits(self) -> None:
         """Tick edit boxes for all editable tasks."""
@@ -433,7 +445,9 @@ class BatchBuilderPanel(QWidget):
         cmd = " ".join(shlex.quote(a) for a in argv)
         return task.cmd_override or cmd
 
-    def set_command_override(self, row: int, cmd: str | None) -> None:
+    def set_command_override(
+        self, row: int, cmd: str | None, *, emit: bool = True
+    ) -> None:
         if row < 0 or row >= len(self.tasks):
             return
         task = self.tasks[row]
@@ -446,6 +460,14 @@ class BatchBuilderPanel(QWidget):
                 task.item.setToolTip(" ".join(shlex.quote(a) for a in argv))
             except Exception:
                 task.item.setToolTip("")
+        if emit:
+            self.tasks_changed.emit()
+
+    def task_is_editable(self, row: int) -> bool:
+        return 0 <= row < len(self.tasks) and self.tasks[row].tag in EDITABLE_TAGS
+
+    def all_command_previews(self) -> list[str]:
+        return [self.command_preview(i) for i in range(len(self.tasks))]
 
     def _start_batch(self) -> None:
         if self.current_index != -1 or not self.tasks:
@@ -471,6 +493,7 @@ class BatchBuilderPanel(QWidget):
                 else:
                     task.item.setToolTip(default_cmd)
                 task.edit.setChecked(False)
+        self.tasks_changed.emit()
         self.current_index = -1
         self.cancel_requested = False
         self.batch_started.emit(len(self.tasks))
