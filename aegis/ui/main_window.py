@@ -219,40 +219,6 @@ class MainWindow(QMainWindow):
     def _command_preview_changed(self, item: QTableWidgetItem) -> None:
         row = item.row()
         col = item.column()
-        if col != 2:
-            return
-        cmd = item.text().strip()
-        if self.batch_panel.task_is_editable(row):
-            self.batch_panel.set_command_override(row, cmd, emit=False)
-        else:
-            self.command_edit.blockSignals(True)
-            item.setText(self.batch_panel.command_preview(row))
-            self.command_edit.blockSignals(False)
-        self.command_edit.blockSignals(True)
-        self.command_edit.setRowCount(len(cmds))
-        self.command_edit.setVerticalHeaderLabels(
-            [str(i + 1) for i in range(len(cmds))]
-        )
-        for i, cmd in enumerate(cmds):
-            icon_text = "✎" if self.batch_panel.task_is_editable(i) else "🔒"
-            icon_item = QTableWidgetItem(icon_text)
-            icon_item.setFlags(Qt.ItemIsEnabled)
-            icon_item.setTextAlignment(Qt.AlignCenter)
-            cmd_item = QTableWidgetItem(cmd)
-            if self.batch_panel.task_is_editable(i):
-                cmd_item.setFlags(
-                    Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
-                )
-            else:
-                cmd_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                cmd_item.setForeground(Qt.gray)
-            self.command_edit.setItem(i, 0, icon_item)
-            self.command_edit.setItem(i, 1, cmd_item)
-        self.command_edit.blockSignals(False)
-
-    def _command_preview_changed(self, item: QTableWidgetItem) -> None:
-        row = item.row()
-        col = item.column()
         if col != 1:
             return
         cmd = item.text().strip()
