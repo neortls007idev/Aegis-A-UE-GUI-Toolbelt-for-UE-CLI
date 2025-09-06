@@ -1,0 +1,27 @@
+name: linting
+
+on:
+  push:
+    branches: ["main", "dev", "feat/**", "maintenance/**"]
+  pull_request:
+    branches: ["main", "dev", "feat/**", "maintenance/**"]
+
+jobs:
+  lint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run ruff
+        run: ruff check .
+      - name: Run black
+        run: black --check .

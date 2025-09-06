@@ -1,0 +1,29 @@
+name: preflight
+
+on:
+  push:
+    branches: ["main", "dev", "feat/**", "maintenance/**"]
+  pull_request:
+    branches: ["main", "dev", "feat/**", "maintenance/**"]
+
+jobs:
+  preflight:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Verify installation
+        run: python -m pip check
+      - name: Check PySide6 import
+        run: python -c "import PySide6"
+      - name: Run mypy
+        run: mypy
