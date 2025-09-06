@@ -1,62 +1,43 @@
+from __future__ import annotations
+
 from pathlib import Path
 import sys
 import subprocess
-from datetime import datetime
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
-    QDockWidget,
-    QBoxLayout,
-    QFileDialog,
     QMainWindow,
     QMessageBox,
-    QMenu,
+    QFileDialog,
+    QProgressBar,
+    QPushButton,
+    QStatusBar,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QHBoxLayout,
-    QPushButton,
-    QProgressBar,
-    QStatusBar,
-    QLineEdit,
-    QComboBox,
-    QTableWidget,
-    QTableWidgetItem,
 )
 
-from aegis.core.profile import Profile
 from aegis.core.settings import settings
 from aegis.core.task_runner import TaskRunner
-from aegis.core.app_preferences import (
-    list_profiles,
-    list_themes,
-    list_log_colors,
-    list_keybindings,
-)
-from aegis.ui.widgets.profile_editor import ProfileEditor
-from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
+from aegis.ui.key_binding_actions import KeyBindingActions
+from aegis.ui.profile_actions import ProfileActions
+from aegis.ui.theme_actions import ThemeActions
+from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
+from aegis.ui.widgets.command_editor import CommandEditor
 from aegis.ui.widgets.env_doc import EnvDocPanel
-from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
-from aegis.ui.widgets.uaft_panel import UaftPanel
-from aegis.ui.widgets.log_colors_editor import LogColorsEditor
 from aegis.ui.widgets.feedback_dialog import FeedbackDialog
 from aegis.ui.widgets.help_dialog import HelpDialog
-from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
+from aegis.ui.widgets.log_colors_editor import LogColorsEditor
+from aegis.ui.widgets.log_panel import LogPanel
+from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
+from aegis.ui.widgets.uaft_panel import UaftPanel
+from aegis.ui.menu_builder import build_menu
 
 
-LAYOUT_VERSION = 4
-LOG_LABELS = {
-    "info": "Information:",
-    "error": "Error:",
-    "warning": "Warning:",
-    "success": "Success:",
-}
-
-
-class MainWindow(QMainWindow):
-    def __init__(self):
+class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Aegis Toolbelt")
         self.resize(1280, 800)
@@ -74,30 +55,27 @@ class MainWindow(QMainWindow):
         env_container = QWidget()
         env_layout = QVBoxLayout(env_container)
         env_layout.addWidget(self.env_doc, 1)
+
         self.batch_panel = BatchBuilderPanel(self.runner, self._log)
         self.batch_panel.batch_started.connect(self._batch_started)
         self.batch_panel.batch_progress.connect(self._batch_progress)
         self.batch_panel.batch_finished.connect(self._batch_finished)
-        self.command_edit = QTableWidget(0, 3)
-        self.command_edit.setHorizontalHeaderLabels(["#", "", "Command"])
-        self.command_edit.horizontalHeader().setStretchLastSection(True)
-        self.command_edit.setColumnWidth(0, 32)
-        self.command_edit.setColumnWidth(1, 24)
-        self.command_edit.setShowGrid(False)
-        self.command_edit.itemChanged.connect(self._command_preview_changed)
+
+        self.command_editor = CommandEditor(self.batch_panel)
+
         build_tabs = QTabWidget()
         build_tabs.addTab(self.batch_panel, "Tasks")
-        build_tabs.addTab(self.command_edit, "Edit Batch Commands")
-        self.batch_panel.tasks_changed.connect(self._refresh_command_edit)
-        self._refresh_command_edit()
+        build_tabs.addTab(self.command_editor, "Edit Batch Commands")
         build_container = QWidget()
         build_layout = QVBoxLayout(build_container)
         build_layout.addWidget(build_tabs, 1)
         self.build_tabs = build_tabs
+
         self.uaft_panel = UaftPanel(self.runner, self._log)
         uaft_container = QWidget()
         uaft_layout = QVBoxLayout(uaft_container)
         uaft_layout.addWidget(self.uaft_panel, 1)
+
         self.tabs.addTab(env_container, "EnvDoc")
         self.tabs.addTab(build_container, "Build")
         self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
@@ -126,50 +104,11 @@ class MainWindow(QMainWindow):
         self.status.addPermanentWidget(self.cancel_tasks)
 
         # Dock: Live Log
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log_messages: list[tuple[str, str, str]] = []
-        self.log_colors = settings.log_colors
-        self.log_search = QLineEdit()
-        self.log_search.setPlaceholderText("Search…")
-        self.log_search.textChanged.connect(self._refresh_log_view)
-        self.log_filter = QComboBox()
-        self.log_filter.addItems(["All", "Info", "Warning", "Error", "Success"])
-        self.log_filter.currentTextChanged.connect(self._refresh_log_view)
-        self.log_clear = QPushButton("Clear")
-        self.log_clear.clicked.connect(self._clear_log)
-        log_container = QWidget()
-        log_layout = QVBoxLayout(log_container)
-        row = QHBoxLayout()
-        row.addWidget(self.log_search, 1)
-        row.addWidget(self.log_filter)
-        row.addWidget(self.log_clear)
-        log_layout.addLayout(row)
-        log_layout.addWidget(self.log)
-        self.log_controls = row
-        self.logDock = QDockWidget("Live Log")
-        self.logDock.setWidget(log_container)
-        self.logDock.setObjectName("dock_live_log")
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
-        self.logDock.setFeatures(
-            QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
-        )
-        self.logDock.setAllowedAreas(
-            Qt.BottomDockWidgetArea
-            | Qt.TopDockWidgetArea
-            | Qt.LeftDockWidgetArea
-            | Qt.RightDockWidgetArea
-        )
-        self.logDock.topLevelChanged.connect(lambda _t: self._reset_log_dock_size())
-        self.logDock.dockLocationChanged.connect(
-            lambda _area: self._reset_log_dock_size()
-        )
-        self._reset_log_dock_size()
-        self.logDock.show()
+        self.log_panel = LogPanel(self)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.log_panel)
 
-        self.profile: Profile | None = None
-        self.actions: dict[str, QAction] = {}
-        self._build_menu()
+        self.profile = None
+        self.actions: dict[str, QAction] = build_menu(self)
         self._apply_key_bindings()
         self._apply_saved_layout()
         self._apply_saved_theme()
@@ -180,214 +119,93 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):  # type: ignore[override]
         super().resizeEvent(event)
-        self._reset_log_dock_size()
+        self.log_panel.reset_size()
 
-    def _reset_log_dock_size(self) -> None:
-        self.logDock.setMinimumSize(0, 0)
-        self.logDock.widget().setMinimumSize(0, 0)
-        area = self.dockWidgetArea(self.logDock)
-        if area in (Qt.LeftDockWidgetArea, Qt.RightDockWidgetArea):
-            self.log_controls.setDirection(QBoxLayout.TopToBottom)
+    # ----- Log colors -----
+    def _edit_log_colors(self) -> None:
+        cfg = self.log_panel.log_colors.all()
+        orig_levels = cfg["levels"]
+        orig_regex = self.log_panel.log_colors.regex_rules()
+        dlg = LogColorsEditor(
+            orig_levels,
+            orig_regex,
+            self,
+            on_preview=self.log_panel.log_message,
+        )
+        if dlg.exec():
+            levels, regex = dlg.get_config()
+            for lvl, col in levels.items():
+                self.log_panel.log_colors.set_level_color(lvl, col)
+            self.log_panel.log_colors.set_regex_rules(regex)
         else:
-            self.log_controls.setDirection(QBoxLayout.LeftToRight)
+            for lvl, col in orig_levels.items():
+                self.log_panel.log_colors.set_level_color(lvl, col)
+            self.log_panel.log_colors.set_regex_rules(orig_regex)
+        self.log_panel.refresh_view()
 
-    def _refresh_command_edit(self, cmds: list[str] | None = None) -> None:
-        if cmds is None:
-            cmds = self.batch_panel.all_command_previews()
-        self.command_edit.blockSignals(True)
-        self.command_edit.setRowCount(len(cmds))
-        for i, cmd in enumerate(cmds):
-            num_item = QTableWidgetItem(str(i + 1))
-            num_item.setFlags(Qt.ItemIsEnabled)
-            num_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            icon_text = "✎" if self.batch_panel.task_is_editable(i) else "🔒"
-            icon_item = QTableWidgetItem(icon_text)
-            icon_item.setFlags(Qt.ItemIsEnabled)
-            icon_item.setTextAlignment(Qt.AlignCenter)
-            cmd_item = QTableWidgetItem(cmd)
-            if self.batch_panel.task_is_editable(i):
-                cmd_item.setFlags(
-                    Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
-                )
-            else:
-                cmd_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                cmd_item.setForeground(Qt.gray)
-            self.command_edit.setItem(i, 0, num_item)
-            self.command_edit.setItem(i, 1, icon_item)
-            self.command_edit.setItem(i, 2, cmd_item)
-        self.command_edit.blockSignals(False)
+    def _import_log_colors(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Log Colors", "", "JSON (*.json)"
+        )
+        if path:
+            try:
+                self.log_panel.log_colors.import_json(path)
+                self.log_panel.refresh_view()
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", str(e))
 
-    def _command_preview_changed(self, item: QTableWidgetItem) -> None:
-        row = item.row()
-        col = item.column()
-        if col != 2:
-            return
-        cmd = item.text().strip()
-        if self.batch_panel.task_is_editable(row):
-            self.batch_panel.set_command_override(row, cmd, emit=False)
-        else:
-            self.command_edit.blockSignals(True)
-            item.setText(self.batch_panel.command_preview(row))
-            self.command_edit.blockSignals(False)
-        cmds = self.batch_panel.all_command_previews()
-        self._refresh_command_edit(cmds)
+    def _export_log_colors(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Log Colors", "", "JSON (*.json)"
+        )
+        if path:
+            try:
+                self.log_panel.log_colors.export_json(path)
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", str(e))
 
-    # ----- Menus -----
-    def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("&File")
-        act_new = QAction("New Window", self)
-        file_menu.addAction(act_new)
-        act_new.triggered.connect(self._new_window)
-        self.actions["file.new_window"] = act_new
-        act_exit = QAction("Exit", self)
-        file_menu.addAction(act_exit)
-        act_exit.triggered.connect(self.close)
-        self.actions["file.exit"] = act_exit
+    def _reset_log_colors(self) -> None:
+        self.log_panel.log_colors.reset()
+        self.log_panel.refresh_view()
 
-        view_menu = self.menuBar().addMenu("&View")
-        act_reset = QAction("Reset Layout", self)
-        view_menu.addAction(act_reset)
-        act_reset.triggered.connect(self._reset_layout)
-        self.actions["view.reset_layout"] = act_reset
+    def _load_log_colors_file(self, path: Path) -> None:
+        try:
+            self.log_panel.log_colors.import_json(str(path))
+            self.log_panel.refresh_view()
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", str(e))
 
-        tools_menu = self.menuBar().addMenu("&Tools")
-        act_echo = QAction("Echo Test Command", self)
-        tools_menu.addAction(act_echo)
-        act_echo.triggered.connect(self._echo_test)
+    # ----- Actions -----
+    def _new_window(self) -> None:
+        argv = [sys.executable, "-m", "aegis.app"]
+        try:
+            subprocess.Popen(argv, shell=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
-        profile_menu = self.menuBar().addMenu("&Profile")
-        act_new_profile = QAction("New", self)
-        profile_menu.addAction(act_new_profile)
-        act_new_profile.triggered.connect(self._new_profile)
-        self.actions["profile.new"] = act_new_profile
-        act_open_profile = QAction("Open…", self)
-        profile_menu.addAction(act_open_profile)
-        act_open_profile.triggered.connect(self._open_profile)
-        self.actions["profile.open"] = act_open_profile
-        act_save_profile = QAction("Save", self)
-        profile_menu.addAction(act_save_profile)
-        act_save_profile.triggered.connect(self._save_profile)
-        self.actions["profile.save"] = act_save_profile
-        act_edit_profile = QAction("Edit…", self)
-        profile_menu.addAction(act_edit_profile)
-        act_edit_profile.triggered.connect(self._edit_profile)
-        self.actions["profile.edit"] = act_edit_profile
-        self._populate_profile_menu(profile_menu)
+    def _reset_layout(self) -> None:
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.log_panel)
+        self.log_panel.show()
+        self.log_panel.reset_size()
 
-        settings_menu = self.menuBar().addMenu("&Settings")
-        theme_menu = settings_menu.addMenu("Load Theme…")
-        act_system = QAction("System", self)
-        theme_menu.addAction(act_system)
-        act_system.triggered.connect(lambda: self._set_theme("system"))
-        act_light = QAction("Light", self)
-        theme_menu.addAction(act_light)
-        act_light.triggered.connect(lambda: self._set_theme("light"))
-        act_dark = QAction("Dark", self)
-        theme_menu.addAction(act_dark)
-        act_dark.triggered.connect(lambda: self._set_theme("dark"))
-        act_custom = QAction("Create Custom", self)
-        theme_menu.addAction(act_custom)
-        act_custom.triggered.connect(self._create_custom_theme)
-        self._populate_theme_menu(theme_menu)
-
-        log_menu = settings_menu.addMenu("Log Colors")
-        act_edit_log = QAction("Edit…", self)
-        log_menu.addAction(act_edit_log)
-        act_edit_log.triggered.connect(self._edit_log_colors)
-        self.actions["settings.log_colors.edit"] = act_edit_log
-        act_import_log = QAction("Import…", self)
-        log_menu.addAction(act_import_log)
-        act_import_log.triggered.connect(self._import_log_colors)
-        self.actions["settings.log_colors.import"] = act_import_log
-        act_export_log = QAction("Export…", self)
-        log_menu.addAction(act_export_log)
-        act_export_log.triggered.connect(self._export_log_colors)
-        self.actions["settings.log_colors.export"] = act_export_log
-        act_reset_log = QAction("Reset to Defaults", self)
-        log_menu.addAction(act_reset_log)
-        act_reset_log.triggered.connect(self._reset_log_colors)
-        self.actions["settings.log_colors.reset"] = act_reset_log
-        self._populate_log_colors_menu(log_menu)
-
-        kb_menu = settings_menu.addMenu("Key Bindings")
-        act_edit_keys = QAction("Edit…", self)
-        kb_menu.addAction(act_edit_keys)
-        act_edit_keys.triggered.connect(self._edit_key_bindings)
-        act_import_keys = QAction("Import…", self)
-        kb_menu.addAction(act_import_keys)
-        act_import_keys.triggered.connect(self._import_key_bindings)
-        act_export_keys = QAction("Export…", self)
-        kb_menu.addAction(act_export_keys)
-        act_export_keys.triggered.connect(self._export_key_bindings)
-        act_reset_keys = QAction("Reset to Defaults", self)
-        kb_menu.addAction(act_reset_keys)
-        act_reset_keys.triggered.connect(self._reset_key_bindings)
-        self._populate_keybindings_menu(kb_menu)
-
-        help_menu = self.menuBar().addMenu("&Help")
-        act_help = QAction("Help", self)
-        help_menu.addAction(act_help)
-        act_help.triggered.connect(self._show_help)
-        self.actions["help.contents"] = act_help
-
-        act_feedback = QAction("Provide Feedback", self)
-        help_menu.addAction(act_feedback)
-        act_feedback.triggered.connect(self._send_feedback)
-        self.actions["help.feedback"] = act_feedback
-
-        act_about = QAction("About", self)
-        help_menu.addAction(act_about)
-        act_about.triggered.connect(self._show_about)
-        self.actions["help.about"] = act_about
-
-    def _populate_profile_menu(self, menu: QMenu) -> None:
-        paths = list_profiles()
-        if paths:
-            menu.addSeparator()
-            for path in paths:
-                act = QAction(path.stem, self)
-                act.triggered.connect(
-                    lambda _checked=False, p=path: self._open_profile_file(p)
-                )
-                menu.addAction(act)
-
-    def _populate_theme_menu(self, menu: QMenu) -> None:
-        paths = list_themes()
-        if paths:
-            menu.addSeparator()
-            for path in paths:
-                act = QAction(path.stem, self)
-                act.triggered.connect(
-                    lambda _checked=False, p=path: self._load_theme_file(p)
-                )
-                menu.addAction(act)
-
-    def _populate_log_colors_menu(self, menu: QMenu) -> None:
-        paths = list_log_colors()
-        if paths:
-            menu.addSeparator()
-            for path in paths:
-                act = QAction(path.stem, self)
-                act.triggered.connect(
-                    lambda _checked=False, p=path: self._load_log_colors_file(p)
-                )
-                menu.addAction(act)
-
-    def _populate_keybindings_menu(self, menu: QMenu) -> None:
-        paths = list_keybindings()
-        if paths:
-            menu.addSeparator()
-            for path in paths:
-                act = QAction(path.stem, self)
-                act.triggered.connect(
-                    lambda _checked=False, p=path: self._load_key_bindings_file(p)
-                )
-                menu.addAction(act)
+    def _echo_test(self) -> None:
+        argv = [sys.executable, "-c", "print('Aegis OK')"]
+        self._log("[echo] Starting…")
+        try:
+            self.runner.start(
+                argv,
+                on_stdout=lambda s: self._log(s, "info"),
+                on_stderr=lambda s: self._log(s, "error"),
+                on_exit=lambda code: self._log(
+                    f"[echo] Exit code: {code}", "success" if code == 0 else "error"
+                ),
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
     def _show_help(self) -> None:
         readme = Path(__file__).resolve().parents[2] / "README.md"
-        dlg = HelpDialog(readme, self)
-        dlg.exec()
+        HelpDialog(readme, self).exec()
 
     def _send_feedback(self) -> None:
         dlg = FeedbackDialog(self)
@@ -431,323 +249,10 @@ class MainWindow(QMainWindow):
         except Exception:
             return "unknown"
 
-    def _apply_key_bindings(self) -> None:
-        kb = settings.key_bindings
-        for action_id, act in self.actions.items():
-            seq = kb.get(action_id)
-            if seq:
-                act.setShortcut(seq)
-
-    def _edit_key_bindings(self) -> None:
-        dlg = KeyBindingsEditor(settings.key_bindings.all(), self)
-        if dlg.exec():
-            for action, seq in dlg.get_bindings().items():
-                settings.key_bindings.set(action, seq)
-            self._apply_key_bindings()
-
-    def _edit_log_colors(self) -> None:
-        cfg = self.log_colors.all()
-        orig_levels = cfg["levels"]
-        orig_regex = self.log_colors.regex_rules()
-        dlg = LogColorsEditor(
-            orig_levels,
-            orig_regex,
-            self,
-            on_preview=self._preview_log_color,
-        )
-        if dlg.exec():
-            levels, regex = dlg.get_config()
-            for lvl, col in levels.items():
-                self.log_colors.set_level_color(lvl, col)
-            self.log_colors.set_regex_rules(regex)
-        else:
-            for lvl, col in orig_levels.items():
-                self.log_colors.set_level_color(lvl, col)
-            self.log_colors.set_regex_rules(orig_regex)
-        self._refresh_log_view()
-
-    def _import_log_colors(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import Log Colors", "", "JSON (*.json)"
-        )
-        if path:
-            try:
-                self.log_colors.import_json(path)
-                self._refresh_log_view()
-            except Exception as e:
-                QMessageBox.critical(self, "Import Error", str(e))
-
-    def _export_log_colors(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export Log Colors", "", "JSON (*.json)"
-        )
-        if path:
-            try:
-                self.log_colors.export_json(path)
-            except Exception as e:
-                QMessageBox.critical(self, "Export Error", str(e))
-
-    def _reset_log_colors(self) -> None:
-        self.log_colors.reset()
-        self._refresh_log_view()
-
-    def _load_log_colors_file(self, path: Path) -> None:
-        try:
-            self.log_colors.import_json(str(path))
-            self._refresh_log_view()
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", str(e))
-
-    def _preview_log_color(self, level: str, color: str) -> None:
-        self.log_colors.set_level_color(level, color)
-        self._refresh_log_view()
-
-    def _import_key_bindings(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import Key Bindings", "", "JSON (*.json)"
-        )
-        if path:
-            try:
-                settings.key_bindings.import_json(path)
-                self._apply_key_bindings()
-            except Exception as e:
-                QMessageBox.critical(self, "Import Error", str(e))
-
-    def _export_key_bindings(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export Key Bindings", "", "JSON (*.json)"
-        )
-        if path:
-            try:
-                settings.key_bindings.export_json(path)
-            except Exception as e:
-                QMessageBox.critical(self, "Export Error", str(e))
-
-    def _reset_key_bindings(self) -> None:
-        settings.key_bindings.reset()
-        self._apply_key_bindings()
-
-    def _load_key_bindings_file(self, path: Path) -> None:
-        try:
-            settings.key_bindings.import_json(str(path))
-            self._apply_key_bindings()
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", str(e))
-
-    # ----- Actions -----
-    def _new_window(self):
-        # launch a new process of this app
-        argv = [sys.executable, "-m", "aegis.app"]
-        try:
-            subprocess.Popen(argv, shell=False)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _reset_layout(self):
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.logDock)
-        self.logDock.show()
-        self._reset_log_dock_size()
-
-    def _echo_test(self):
-        argv = [sys.executable, "-c", "print('Aegis OK')"]
-        self._log("[echo] Starting…", "info")
-        try:
-            self.runner.start(
-                argv,
-                on_stdout=lambda s: self._log(s, "info"),
-                on_stderr=lambda s: self._log(s, "error"),
-                on_exit=lambda code: self._log(
-                    f"[echo] Exit code: {code}", "success" if code == 0 else "error"
-                ),
-            )
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _new_profile(self) -> None:
-        dlg = ProfileEditor(parent=self)
-        if dlg.exec():
-            self.profile = dlg.get_profile()
-            self._save_profile_as()
-            self._profile_changed()
-
-    def _open_profile(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open Profile", "", "JSON (*.json)")
-        if path:
-            try:
-                self.profile = Profile.load(Path(path))
-                settings.set_profile_path(path)
-                self._profile_changed()
-            except Exception as e:
-                QMessageBox.critical(self, "Open Error", str(e))
-
-    def _open_profile_file(self, path: Path) -> None:
-        try:
-            self.profile = Profile.load(path)
-            settings.set_profile_path(str(path))
-            self._profile_changed()
-        except Exception as e:
-            QMessageBox.critical(self, "Open Error", str(e))
-
-    def _edit_profile(self) -> None:
-        if not self.profile:
-            QMessageBox.information(self, "No Profile", "No profile to edit.")
-            return
-        dlg = ProfileEditor(self.profile, self)
-        if dlg.exec():
-            self.profile = dlg.get_profile()
-            self._save_profile()
-            self._profile_changed()
-
-    def _save_profile(self) -> None:
-        if not getattr(self, "profile", None):
-            QMessageBox.information(self, "No Profile", "No profile to save.")
-            return
-        self._save_profile_as(settings.profile_path())
-
-    def _save_profile_as(self, start_path: str | None = None) -> None:
-        if not getattr(self, "profile", None):
-            return
-        initial = start_path or ""
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Profile", initial, "JSON (*.json)"
-        )
-        if path:
-            try:
-                self.profile.save(Path(path))
-                settings.set_profile_path(path)
-                self._log(f"[profile] Saved to {path}", "success")
-            except Exception as e:
-                QMessageBox.critical(self, "Save Error", str(e))
-
-    def _load_last_profile(self) -> None:
-        path = settings.profile_path()
-        if path and Path(path).exists():
-            try:
-                self.profile = Profile.load(Path(path))
-            except Exception:
-                self.profile = None
-        self._profile_changed()
-
-    def _set_theme(self, mode: str) -> None:
-        settings.set_theme_mode(mode)
-        self._apply_theme()
-
-    def _create_custom_theme(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select .qss theme", "", "QSS (*.qss)"
-        )
-        if not path:
-            return
-        try:
-            settings.set_theme_mode("custom")
-            settings.set_custom_theme_path(path)
-            self._apply_theme()
-        except Exception as e:
-            QMessageBox.critical(self, "Theme Error", str(e))
-
-    def _load_theme_file(self, path: Path) -> None:
-        try:
-            settings.set_theme_mode("custom")
-            settings.set_custom_theme_path(str(path))
-            self._apply_theme()
-        except Exception as e:
-            QMessageBox.critical(self, "Theme Error", str(e))
-
-    # ----- Persistence -----
-    def _apply_saved_layout(self):
-        g = settings.load_geometry()
-        if g:
-            self.restoreGeometry(g)
-        else:
-            self.setWindowState(self.windowState() | Qt.WindowMaximized)
-        if settings.layout_version() != LAYOUT_VERSION:
-            self._reset_layout()
-            settings.set_layout_version(LAYOUT_VERSION)
-            return
-        s = settings.load_state()
-        if s:
-            self.restoreState(s)
-
-    def _apply_saved_theme(self):
-        self._apply_theme()
-
-    def _apply_theme(self, mode: str | None = None) -> None:
-        mode = mode or settings.theme_mode()
-        theme_dir = Path(__file__).parent / "themes"
-        try:
-            if mode == "system":
-                scheme = QGuiApplication.styleHints().colorScheme()
-                fname = "dark.qss" if scheme == Qt.ColorScheme.Dark else "light.qss"
-                with open(theme_dir / fname, "r", encoding="utf-8") as f:
-                    self.setStyleSheet(f.read())
-            elif mode in ("light", "dark"):
-                with open(theme_dir / f"{mode}.qss", "r", encoding="utf-8") as f:
-                    self.setStyleSheet(f.read())
-            elif mode == "custom":
-                path = settings.custom_theme_path()
-                if path:
-                    with open(path, "r", encoding="utf-8") as f:
-                        self.setStyleSheet(f.read())
-        except Exception:
-            pass
-
-    def _on_system_theme_change(self) -> None:
-        if settings.theme_mode() == "system":
-            self._apply_theme("system")
-
-    def _apply_profile_title(self) -> None:
-        base = "Aegis - A UE GUI Toolbelt for UE CLI"
-        if self.profile:
-            nick = self.profile.nickname.strip()
-            proj = self.profile.project_dir.name
-            parts = [base]
-            if nick:
-                parts.append(nick)
-            parts.append(proj)
-            self.setWindowTitle(" - ".join(parts))
-        else:
-            self.setWindowTitle(base)
-
-    def _profile_changed(self) -> None:
-        self._apply_profile_title()
-        self.info_bar.update(self.profile, settings.profile_path())
-        self.env_doc.update_profile(self.profile)
-        self.batch_panel.update_profile(self.profile)
-        self.uaft_panel.update_profile(self.profile)
-
     def _log(self, message: str, level: str = "info") -> None:
-        ts = datetime.now().strftime("%H:%M:%S")
-        self.log_messages.append((ts, message, level))
-        if not self.logDock.isVisible():
-            self.logDock.show()
-        if self._log_matches_filters(message, level):
-            color = self.log_colors.color_for(message, level)
-            label = LOG_LABELS.get(level, f"{level.title()}:")
-            self.log.append(
-                f"<span style='color:{color};'>{ts} {label} {message}</span>"
-            )
+        self.log_panel.log_message(message, level)
 
-    def _clear_log(self) -> None:
-        self.log.clear()
-        self.log_messages.clear()
-
-    def _log_matches_filters(self, message: str, level: str) -> bool:
-        level_filter = self.log_filter.currentText().lower()
-        if level_filter != "all" and level != level_filter:
-            return False
-        query = self.log_search.text().lower()
-        return query in message.lower()
-
-    def _refresh_log_view(self) -> None:
-        self.log.clear()
-        for ts, message, level in self.log_messages:
-            if self._log_matches_filters(message, level):
-                color = self.log_colors.color_for(message, level)
-                label = LOG_LABELS.get(level, f"{level.title()}:")
-                self.log.append(
-                    f"<span style='color:{color};'>{ts} {label} {message}</span>"
-                )
-
+    # ----- Tasks -----
     def _task_started(self) -> None:
         self.progress.setVisible(True)
         self.cancel_tasks.setVisible(True)
@@ -777,7 +282,7 @@ class MainWindow(QMainWindow):
         self.runner.cancel()
         self.batch_panel.cancel_batch()
 
-    def closeEvent(self, ev):
+    def closeEvent(self, ev):  # type: ignore[override]
         settings.save_geometry(self.saveGeometry())
         settings.save_state(self.saveState())
         super().closeEvent(ev)
