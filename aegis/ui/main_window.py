@@ -81,11 +81,9 @@ class MainWindow(QMainWindow):
         self.command_edit.textChanged.connect(self._command_preview_changed)
         build_tabs = QTabWidget()
         build_tabs.addTab(self.batch_panel, "Tasks")
-        build_tabs.addTab(self.command_edit, "Preview")
-        self.batch_panel.task_list.currentRowChanged.connect(
-            self._update_command_preview
-        )
-        self._update_command_preview(self.batch_panel.task_list.currentRow())
+        build_tabs.addTab(self.command_edit, "Edit Batch Commands")
+        self.batch_panel.tasks_changed.connect(self._refresh_command_edit)
+        self._refresh_command_edit()
         build_container = QWidget()
         build_layout = QVBoxLayout(build_container)
         build_layout.addWidget(build_tabs, 1)
@@ -187,16 +185,30 @@ class MainWindow(QMainWindow):
         else:
             self.log_controls.setDirection(QBoxLayout.LeftToRight)
 
-    def _update_command_preview(self, row: int) -> None:
-        cmd = self.batch_panel.command_preview(row)
+    def _refresh_command_edit(self) -> None:
+        cmds = self.batch_panel.all_command_previews()
+        lines: list[str] = []
+        for i, cmd in enumerate(cmds, start=1):
+            prefix = f"{i}: "
+            if not self.batch_panel.task_is_editable(i - 1):
+                prefix += "[locked] "
+            lines.append(prefix + cmd)
+        text = "\n".join(lines)
         self.command_edit.blockSignals(True)
-        self.command_edit.setPlainText(cmd)
+        self.command_edit.setPlainText(text)
         self.command_edit.blockSignals(False)
 
     def _command_preview_changed(self) -> None:
-        row = self.batch_panel.task_list.currentRow()
-        if row != -1:
-            self.batch_panel.set_command_override(row, self.command_edit.toPlainText())
+        lines = self.command_edit.toPlainText().splitlines()
+        for i, line in enumerate(lines):
+            if ":" in line:
+                _, cmd_part = line.split(":", 1)
+                cmd = cmd_part.strip()
+            else:
+                cmd = line.strip()
+            if self.batch_panel.task_is_editable(i):
+                self.batch_panel.set_command_override(i, cmd, emit=False)
+        self.batch_panel.tasks_changed.emit()
 
     # ----- Menus -----
     def _build_menu(self) -> None:
