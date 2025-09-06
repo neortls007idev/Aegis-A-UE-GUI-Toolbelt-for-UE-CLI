@@ -1,3 +1,5 @@
+"""Main application window coordinating panels and global actions."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,7 +7,12 @@ import sys
 import subprocess
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
+from PySide6.QtGui import (
+    QAction,
+    QDesktopServices,
+    QGuiApplication,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
@@ -117,7 +124,8 @@ class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
             self._on_system_theme_change
         )
 
-    def resizeEvent(self, event):  # type: ignore[override]
+    def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
+        """Ensure log panel width tracks window size."""
         super().resizeEvent(event)
         self.log_panel.reset_size()
 
