@@ -1,12 +1,16 @@
 from PySide6.QtWidgets import QApplication
 import sys
+from aegis.core.preferences import preferences
 from aegis.ui.main_window import MainWindow
 
 
 def main():
     app = QApplication(sys.argv)
     w = MainWindow()
-    w.show()
+    if preferences.launch_maximized:
+        w.showMaximized()
+    else:
+        w.show()
     sys.exit(app.exec())
 
 
