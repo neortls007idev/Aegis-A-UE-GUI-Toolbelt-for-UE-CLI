@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QLineEdit,
     QComboBox,
-    QPlainTextEdit,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from aegis.core.profile import Profile
@@ -77,15 +78,17 @@ class MainWindow(QMainWindow):
         self.batch_panel.batch_started.connect(self._batch_started)
         self.batch_panel.batch_progress.connect(self._batch_progress)
         self.batch_panel.batch_finished.connect(self._batch_finished)
-        self.command_edit = QPlainTextEdit()
-        self.command_edit.textChanged.connect(self._command_preview_changed)
+        self.command_edit = QTableWidget(0, 2)
+        self.command_edit.setHorizontalHeaderLabels(["", "Command"])
+        self.command_edit.horizontalHeader().setStretchLastSection(True)
+        self.command_edit.setColumnWidth(0, 24)
+        self.command_edit.setShowGrid(False)
+        self.command_edit.itemChanged.connect(self._command_preview_changed)
         build_tabs = QTabWidget()
         build_tabs.addTab(self.batch_panel, "Tasks")
-        build_tabs.addTab(self.command_edit, "Preview")
-        self.batch_panel.task_list.currentRowChanged.connect(
-            self._update_command_preview
-        )
-        self._update_command_preview(self.batch_panel.task_list.currentRow())
+        build_tabs.addTab(self.command_edit, "Edit Batch Commands")
+        self.batch_panel.tasks_changed.connect(self._refresh_command_edit)
+        self._refresh_command_edit()
         build_container = QWidget()
         build_layout = QVBoxLayout(build_container)
         build_layout.addWidget(build_tabs, 1)
@@ -187,16 +190,43 @@ class MainWindow(QMainWindow):
         else:
             self.log_controls.setDirection(QBoxLayout.LeftToRight)
 
-    def _update_command_preview(self, row: int) -> None:
-        cmd = self.batch_panel.command_preview(row)
+    def _refresh_command_edit(self) -> None:
+        cmds = self.batch_panel.all_command_previews()
         self.command_edit.blockSignals(True)
-        self.command_edit.setPlainText(cmd)
+        self.command_edit.setRowCount(len(cmds))
+        self.command_edit.setVerticalHeaderLabels(
+            [str(i + 1) for i in range(len(cmds))]
+        )
+        for i, cmd in enumerate(cmds):
+            icon_text = "✎" if self.batch_panel.task_is_editable(i) else "🔒"
+            icon_item = QTableWidgetItem(icon_text)
+            icon_item.setFlags(Qt.ItemIsEnabled)
+            icon_item.setTextAlignment(Qt.AlignCenter)
+            cmd_item = QTableWidgetItem(cmd)
+            if self.batch_panel.task_is_editable(i):
+                cmd_item.setFlags(
+                    Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
+                )
+            else:
+                cmd_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                cmd_item.setForeground(Qt.gray)
+            self.command_edit.setItem(i, 0, icon_item)
+            self.command_edit.setItem(i, 1, cmd_item)
         self.command_edit.blockSignals(False)
 
-    def _command_preview_changed(self) -> None:
-        row = self.batch_panel.task_list.currentRow()
-        if row != -1:
-            self.batch_panel.set_command_override(row, self.command_edit.toPlainText())
+    def _command_preview_changed(self, item: QTableWidgetItem) -> None:
+        row = item.row()
+        col = item.column()
+        if col != 1:
+            return
+        cmd = item.text().strip()
+        if self.batch_panel.task_is_editable(row):
+            self.batch_panel.set_command_override(row, cmd, emit=False)
+        else:
+            self.command_edit.blockSignals(True)
+            item.setText(self.batch_panel.command_preview(row))
+            self.command_edit.blockSignals(False)
+        self.batch_panel.tasks_changed.emit()
 
     # ----- Menus -----
     def _build_menu(self) -> None:
