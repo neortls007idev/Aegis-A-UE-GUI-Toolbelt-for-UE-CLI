@@ -2,9 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - dev
+      - feat/**
+      - maintainence/**
   pull_request:
-
+    branches:
+      - main
+      - dev
+      - feat/**
+      - maintainence/**
 jobs:
   lint-test:
     runs-on: ubuntu-latest
