@@ -1,9 +1,20 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 23.7.0
+  - repo: local
     hooks:
       - id: black
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.0.289
-    hooks:
+        name: black
+        entry: black
+        language: system
+        types: [python]
       - id: ruff
+        name: ruff
+        entry: ruff
+        args: [check]
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
+        pass_filenames: false
+        args: [aegis/modules, aegis/core/ini_parser.py]
