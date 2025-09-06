@@ -61,13 +61,37 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
-Run linters and tests before committing:
+Run linters, type checks, and tests before committing:
 
 ```bash
-ruff .
+ruff check .
 black --check .
-pytest
+mypy
+PYTHONPATH=$PWD pytest
 ```
+
+See `CODING_STANDARDS.md` for naming conventions and guardrails.
+
+## CI/CD
+
+GitHub Actions runs `ruff check`, `black --check`, `mypy`, and `PYTHONPATH=$PWD pytest` on pushes to `main`, `dev`, `feat/**`, and `maintenance/**` branches. Codex/AI agents and contributors must add or update unit and functional tests for new behavior and keep workflows, dependencies, and tooling in sync so the pipeline stays green.
+
+## Architecture overview
+
+The codebase is organized to keep UI concerns separate from core logic:
+
+- `aegis/app.py` – application entry point.
+- `aegis/core` – reusable services such as the task runner and settings.
+- `aegis/modules` – thin wrappers for Unreal command-line tools.
+- `aegis/ui` – all widgets, pages, and theme assets.
+
+Commands are executed through `TaskRunner` using argv lists; stdout/stderr are streamed to the log panel and the exit code is surfaced to the user.
+
+## Troubleshooting
+
+- **Import errors** – run tests with `PYTHONPATH=$PWD` or install the package in editable mode.
+- **Missing PySide6** – install Qt bindings via `pip install -r requirements.txt`.
+- **Stuck or blocking UI** – ensure long-running subprocesses use background threads.
 
 See `CONTRIBUTORS.md` for contributor guidelines.
 

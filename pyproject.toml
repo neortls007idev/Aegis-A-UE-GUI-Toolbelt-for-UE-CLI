@@ -9,3 +9,8 @@ target-version = "py311"
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.11"
+files = ["aegis/modules", "aegis/core/ini_parser.py"]
+ignore_missing_imports = true
