@@ -428,6 +428,12 @@ class BatchBuilderPanel(QWidget):
             if task.edit.isEnabled():
                 task.edit.setChecked(True)
 
+    def _check_all_edits(self) -> None:
+        """Tick edit boxes for all editable tasks."""
+        for task in self.tasks:
+            if task.edit.isEnabled():
+                task.edit.setChecked(True)
+
     def command_preview(self, row: int) -> str:
         if row < 0 or row >= len(self.tasks):
             return ""
