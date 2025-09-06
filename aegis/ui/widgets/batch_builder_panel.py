@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QDialog,
     QCheckBox,
+    QGroupBox,
 )
 
 from aegis.core.profile import Profile
@@ -57,6 +58,9 @@ DEFAULT_PLATFORMS = ["Win64", "Linux", "Mac", "Android"]
 
 # Tasks that support manual command editing
 EDITABLE_TAGS = {
+    "build",
+    "clean",
+    "rebuild",
     "cook",
     "stage",
     "package",
@@ -144,21 +148,26 @@ class BatchBuilderPanel(QWidget):
         layout.addLayout(plat_layout)
 
         # ----- Overrides -----
-        over_layout = QVBoxLayout()
-        over_layout.addWidget(QLabel("Manual Overrides"))
-        self.override_table = QTableWidget(0, 2)
-        self.override_table.setHorizontalHeaderLabels(["Switch", "Value"])
-        self.override_table.horizontalHeader().setStretchLastSection(True)
-        over_layout.addWidget(self.override_table)
+        over_group = QGroupBox("Manual Overrides")
+        over_layout = QVBoxLayout(over_group)
+
+        uat_group = QGroupBox("UAT (BuildCookRun)")
+        uat_layout = QVBoxLayout(uat_group)
+        self.uat_override_table = QTableWidget(0, 2)
+        self.uat_override_table.setHorizontalHeaderLabels(["Switch", "Value"])
+        self.uat_override_table.horizontalHeader().setStretchLastSection(True)
+        uat_layout.addWidget(self.uat_override_table)
         row = QHBoxLayout()
         btn_add_override = QPushButton("Add…")
-        btn_add_override.clicked.connect(self._add_override)
+        btn_add_override.clicked.connect(self._add_uat_override)
         btn_remove_override = QPushButton("Remove")
-        btn_remove_override.clicked.connect(self._remove_override)
+        btn_remove_override.clicked.connect(self._remove_uat_override)
         row.addWidget(btn_add_override)
         row.addWidget(btn_remove_override)
-        over_layout.addLayout(row)
-        layout.addLayout(over_layout)
+        uat_layout.addLayout(row)
+
+        over_layout.addWidget(uat_group)
+        layout.addWidget(over_group)
 
         # ----- Actions -----
         act_layout = QVBoxLayout()
@@ -225,7 +234,7 @@ class BatchBuilderPanel(QWidget):
         self.uat = Uat(profile.engine_root, profile.project_dir) if profile else None
         self.config_list.clear()
         self.platform_list.clear()
-        self.override_table.setRowCount(0)
+        self.uat_override_table.setRowCount(0)
         if not profile:
             cfgs = DEFAULT_CONFIGS
             plats = DEFAULT_PLATFORMS
@@ -274,28 +283,28 @@ class BatchBuilderPanel(QWidget):
             self.platform_list.item(i).text() for i in range(self.platform_list.count())
         ]
 
-    def _add_override(self) -> None:
+    def _add_uat_override(self) -> None:
         dialog = ManualOverrideDialog(self)
         if dialog.exec() != QDialog.Accepted:
             return
         for switch, value in dialog.selected_overrides():
-            row = self.override_table.rowCount()
-            self.override_table.insertRow(row)
-            self.override_table.setItem(row, 0, QTableWidgetItem(switch))
-            self.override_table.setItem(row, 1, QTableWidgetItem(value))
+            row = self.uat_override_table.rowCount()
+            self.uat_override_table.insertRow(row)
+            self.uat_override_table.setItem(row, 0, QTableWidgetItem(switch))
+            self.uat_override_table.setItem(row, 1, QTableWidgetItem(value))
             hint = BUILD_COOK_RUN_SWITCHES.get(switch, "")
-            self.override_table.item(row, 0).setToolTip(hint)
-            self.override_table.item(row, 1).setToolTip(hint)
+            self.uat_override_table.item(row, 0).setToolTip(hint)
+            self.uat_override_table.item(row, 1).setToolTip(hint)
 
-    def _remove_override(self) -> None:
-        row = self.override_table.currentRow()
+    def _remove_uat_override(self) -> None:
+        row = self.uat_override_table.currentRow()
         if row != -1:
-            self.override_table.removeRow(row)
+            self.uat_override_table.removeRow(row)
 
-    def _manual_override_args(self) -> list[str]:
+    def _manual_uat_override_args(self) -> list[str]:
         args: list[str] = []
-        for row in range(self.override_table.rowCount()):
-            key_item = self.override_table.item(row, 0)
+        for row in range(self.uat_override_table.rowCount()):
+            key_item = self.uat_override_table.item(row, 0)
             if not key_item:
                 continue
             switch_text = key_item.text().strip()
@@ -308,7 +317,7 @@ class BatchBuilderPanel(QWidget):
             else:
                 switch_part = switch_text
             switch = "-" + switch_part.lstrip("-")
-            val_item = self.override_table.item(row, 1)
+            val_item = self.uat_override_table.item(row, 1)
             value = val_item.text().strip() if val_item else ""
             if not value:
                 value = inline_value.strip()
@@ -427,13 +436,7 @@ class BatchBuilderPanel(QWidget):
         for task in self.tasks:
             if task.edit.isEnabled():
                 task.edit.setChecked(True)
-
-    def _check_all_edits(self) -> None:
-        """Tick edit boxes for all editable tasks."""
-        for task in self.tasks:
-            if task.edit.isEnabled():
-                task.edit.setChecked(True)
-
+                
     def command_preview(self, row: int) -> str:
         if row < 0 or row >= len(self.tasks):
             return ""
@@ -559,7 +562,7 @@ class BatchBuilderPanel(QWidget):
                 cook=True,
                 skip_build=True,
             )
-            argv += self._manual_override_args()
+            argv += self._manual_uat_override_args()
             return argv
         if task.tag == "stage":
             if task.clean and not preview:
@@ -572,7 +575,7 @@ class BatchBuilderPanel(QWidget):
                 skip_build=True,
                 skip_cook=True,
             )
-            argv += self._manual_override_args()
+            argv += self._manual_uat_override_args()
             return argv
         if task.tag == "package":
             if task.clean and not preview:
@@ -586,19 +589,19 @@ class BatchBuilderPanel(QWidget):
                 skip_cook=True,
                 skip_stage=True,
             )
-            argv += self._manual_override_args()
+            argv += self._manual_uat_override_args()
             return argv
         if task.tag == "ddc-build":
             argv = self.uat.build_ddc_argv(task.platform)
-            argv += self._manual_override_args()
+            argv += self._manual_uat_override_args()
             return argv
         if task.tag == "ddc-clean":
             argv = self.uat.build_ddc_argv(task.platform, clean=True)
-            argv += self._manual_override_args()
+            argv += self._manual_uat_override_args()
             return argv
         if task.tag == "ddc-rebuild":
             argv = self.uat.rebuild_ddc_argv(task.platform)
-            argv += self._manual_override_args()
+            argv += self._manual_uat_override_args()
             return argv
         return [
             sys.executable,
