@@ -1,4 +1,8 @@
-"""Panel for constructing and running batches of build tasks."""
+"""Panel for constructing and running batches of build tasks.
+
+Handles queueing, profile integration, and delegates BuildCookRun overrides
+to :class:`UatOverrideWidget`.
+"""
 
 from __future__ import annotations
 
@@ -20,9 +24,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QProgressBar,
     QAbstractItemView,
-    QTableWidget,
-    QTableWidgetItem,
-    QDialog,
     QCheckBox,
     QGroupBox,
 )
@@ -31,10 +32,7 @@ from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.modules.ubt import Ubt
 from aegis.modules.uat import Uat
-from aegis.ui.widgets.manual_override_dialog import (
-    ManualOverrideDialog,
-    BUILD_COOK_RUN_SWITCHES,
-)
+from aegis.ui.widgets.uat_override_widget import UatOverrideWidget
 from aegis.ui.models.queued_task import QueuedTask
 
 
@@ -139,23 +137,8 @@ class BatchBuilderPanel(QWidget):
         # ----- Overrides -----
         over_group = QGroupBox("Manual Overrides")
         over_layout = QVBoxLayout(over_group)
-
-        uat_group = QGroupBox("UAT (BuildCookRun)")
-        uat_layout = QVBoxLayout(uat_group)
-        self.uat_override_table = QTableWidget(0, 2)
-        self.uat_override_table.setHorizontalHeaderLabels(["Switch", "Value"])
-        self.uat_override_table.horizontalHeader().setStretchLastSection(True)
-        uat_layout.addWidget(self.uat_override_table)
-        row = QHBoxLayout()
-        btn_add_override = QPushButton("Add…")
-        btn_add_override.clicked.connect(self._add_uat_override)
-        btn_remove_override = QPushButton("Remove")
-        btn_remove_override.clicked.connect(self._remove_uat_override)
-        row.addWidget(btn_add_override)
-        row.addWidget(btn_remove_override)
-        uat_layout.addLayout(row)
-
-        over_layout.addWidget(uat_group)
+        self.uat_overrides = UatOverrideWidget()
+        over_layout.addWidget(self.uat_overrides)
         layout.addWidget(over_group)
 
         # ----- Actions -----
@@ -223,7 +206,7 @@ class BatchBuilderPanel(QWidget):
         self.uat = Uat(profile.engine_root, profile.project_dir) if profile else None
         self.config_list.clear()
         self.platform_list.clear()
-        self.uat_override_table.setRowCount(0)
+        self.uat_overrides.clear()
         if not profile:
             cfgs = DEFAULT_CONFIGS
             plats = DEFAULT_PLATFORMS
@@ -271,50 +254,6 @@ class BatchBuilderPanel(QWidget):
         return [
             self.platform_list.item(i).text() for i in range(self.platform_list.count())
         ]
-
-    def _add_uat_override(self) -> None:
-        dialog = ManualOverrideDialog(self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        for switch, value in dialog.selected_overrides():
-            row = self.uat_override_table.rowCount()
-            self.uat_override_table.insertRow(row)
-            self.uat_override_table.setItem(row, 0, QTableWidgetItem(switch))
-            self.uat_override_table.setItem(row, 1, QTableWidgetItem(value))
-            hint = BUILD_COOK_RUN_SWITCHES.get(switch, "")
-            self.uat_override_table.item(row, 0).setToolTip(hint)
-            self.uat_override_table.item(row, 1).setToolTip(hint)
-
-    def _remove_uat_override(self) -> None:
-        row = self.uat_override_table.currentRow()
-        if row != -1:
-            self.uat_override_table.removeRow(row)
-
-    def _manual_uat_override_args(self) -> list[str]:
-        args: list[str] = []
-        for row in range(self.uat_override_table.rowCount()):
-            key_item = self.uat_override_table.item(row, 0)
-            if not key_item:
-                continue
-            switch_text = key_item.text().strip()
-            if not switch_text:
-                continue
-            # Normalize to "-switch" and allow an inline "-switch=value" pattern
-            inline_value = ""
-            if "=" in switch_text:
-                switch_part, inline_value = switch_text.split("=", 1)
-            else:
-                switch_part = switch_text
-            switch = "-" + switch_part.lstrip("-")
-            val_item = self.uat_override_table.item(row, 1)
-            value = val_item.text().strip() if val_item else ""
-            if not value:
-                value = inline_value.strip()
-            if value:
-                args.append(f"{switch}={value}")
-            else:
-                args.append(switch)
-        return args
 
     def _allowed_platforms_for_config(self, cfg: str) -> Optional[Set[str]]:
         if cfg.endswith("Editor"):
@@ -557,7 +496,7 @@ class BatchBuilderPanel(QWidget):
                 cook=True,
                 skip_build=True,
             )
-            argv += self._manual_uat_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "stage":
             if task.clean and not preview:
@@ -570,7 +509,7 @@ class BatchBuilderPanel(QWidget):
                 skip_build=True,
                 skip_cook=True,
             )
-            argv += self._manual_uat_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "package":
             if task.clean and not preview:
@@ -584,19 +523,19 @@ class BatchBuilderPanel(QWidget):
                 skip_cook=True,
                 skip_stage=True,
             )
-            argv += self._manual_uat_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "ddc-build":
             argv = self.uat.build_ddc_argv(task.platform)
-            argv += self._manual_uat_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "ddc-clean":
             argv = self.uat.build_ddc_argv(task.platform, clean=True)
-            argv += self._manual_uat_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "ddc-rebuild":
             argv = self.uat.rebuild_ddc_argv(task.platform)
-            argv += self._manual_uat_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         return [
             sys.executable,

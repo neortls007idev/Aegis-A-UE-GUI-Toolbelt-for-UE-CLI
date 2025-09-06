@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from aegis.modules.uaft import Uaft
 
 
@@ -15,6 +17,7 @@ SecurityToken={token}
 
 
 def test_security_token_updates(tmp_path: Path) -> None:
+    pytest.importorskip("watchfiles")
     ini = tmp_path / "Config" / "DefaultEngine.ini"
     make_ini(ini, "AAA")
     uaft = Uaft(Path("uaft"), project_dir=tmp_path)
