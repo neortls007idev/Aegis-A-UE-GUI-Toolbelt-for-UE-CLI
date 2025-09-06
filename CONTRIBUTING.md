@@ -24,6 +24,19 @@
 - Run `ruff check .`, `black --check .`, `mypy`, and `PYTHONPATH=$PWD pytest` before pushing.
 - Refer to [docs/architecture.md](docs/architecture.md) for layout and extension points when adding new tools.
 
+## UI standards
+- Widget classes use PascalCase and end with `Widget`. Instances set a snake_case
+  `objectName` with suffixes such as `_btn`, `_dock`, or `_log`.
+- Buttons use verb-first labels (for example, `Build Paks`, `Run Tests`). Every
+  action shows a copyable command preview that matches the exact `argv` passed to
+  `subprocess.Popen`.
+- Panels are implemented as `QDockWidget` instances with
+  `setAllowedAreas(Qt.AllDockWidgetAreas)` and features set to
+  `DockWidgetMovable | DockWidgetFloatable`.
+- Themes live under `aegis/ui/themes/*.qss`; target widgets by `objectName` and
+  persist the selected theme with `QSettings`.
+- See `CODING_STANDARDS.md` for required type hints and subprocess policies.
+
 ## Pull requests
 - Target `dev` unless fixing a critical issue on `main`.
 - Describe manual test steps and results.

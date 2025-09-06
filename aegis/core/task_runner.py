@@ -51,6 +51,11 @@ class TaskRunner(QObject):
             Emitted immediately after the subprocess is spawned.
         finished
             Emitted with the exit code after the watcher thread completes.
+
+        Raises
+        ------
+        RuntimeError
+            If another task is already running.
         """
         if self._proc:
             raise RuntimeError("A task is already running")
@@ -91,8 +96,9 @@ class TaskRunner(QObject):
         """Terminate the running subprocess, if any.
 
         ``terminate()`` sends ``SIGTERM`` and returns immediately; the watcher
-        thread created by :meth:`start` will still emit :pyattr:`finished` once
-        the process exits.
+        thread created by :meth:`start` still emits :pyattr:`finished` when the
+        process exits. Calling :meth:`cancel` when no task is active is a
+        no-op.
         """
         if self._proc:
             self._proc.terminate()

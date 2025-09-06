@@ -74,13 +74,17 @@ See `CODING_STANDARDS.md` for naming conventions and guardrails.
 
 ## PyInstaller builds
 
-The [release workflow](.github/workflows/release.yml) packages the app with
-PyInstaller. The same command can be run locally to produce standalone
-executables in the `dist/` folder.
+The [release workflow](.github/workflows/release.yml) uses PyInstaller to
+produce standalone binaries. The same steps can be executed locally:
 
 ### macOS
 
-Install Xcode command line tools and ensure Python 3.11 is available:
+**Prerequisites**
+
+- Xcode Command Line Tools
+- Python 3.11+
+
+**Build**
 
 ```bash
 xcode-select --install  # first-time setup
@@ -90,7 +94,13 @@ pyinstaller -F -n Aegis --add-data "aegis/ui/themes:ui/themes" aegis/app.py
 
 ### Linux (Debian/Ubuntu)
 
-Install build tools and Qt libraries required by PySide6:
+**Prerequisites**
+
+- `build-essential`
+- `libglib2.0-0` `libglu1-mesa` `libxkbcommon-x11-0` `libxcb-cursor0`
+- Python 3.11+
+
+**Build**
 
 ```bash
 sudo apt-get update
@@ -99,7 +109,7 @@ pip install -r requirements.txt pyinstaller
 pyinstaller -F -n Aegis --add-data "aegis/ui/themes:ui/themes" aegis/app.py
 ```
 
-The generated binary is placed in `dist/`.
+Artifacts are written to the `dist/` directory.
 
 ## CI/CD
 
@@ -131,8 +141,9 @@ runner.start(
 )
 # runner.cancel()  # terminate early
 ```
-
-See [docs/architecture.md](docs/architecture.md) for extension points and layout details.
+See [docs/architecture.md](docs/architecture.md) for extension points and
+layout details, and consult the docstrings of `TaskRunner.start` and
+`TaskRunner.cancel` for full API semantics.
 
 ## Troubleshooting
 
