@@ -2,6 +2,10 @@ name: Release (PyInstaller)
 on:
   push:
     tags: ["v*.*.*"]
+
+env:
+  ACTIONS_STEP_DEBUG: true
+  ACTIONS_RUNNER_DEBUG: true
 jobs:
   win:
     runs-on: windows-latest
