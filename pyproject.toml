@@ -12,5 +12,5 @@ addopts = "-ra"
 
 [tool.mypy]
 python_version = "3.11"
-files = ["aegis/modules", "aegis/core/ini_parser.py"]
+files = ["aegis/modules", "aegis/core"]
 ignore_missing_imports = true

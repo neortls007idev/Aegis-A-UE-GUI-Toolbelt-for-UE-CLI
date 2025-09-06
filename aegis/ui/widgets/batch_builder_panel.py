@@ -1,8 +1,9 @@
+"""Panel for constructing and running batches of build tasks."""
+
 from __future__ import annotations
 
 import sys
 import shlex
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Set
 import shutil
@@ -34,6 +35,7 @@ from aegis.ui.widgets.manual_override_dialog import (
     ManualOverrideDialog,
     BUILD_COOK_RUN_SWITCHES,
 )
+from aegis.ui.models.queued_task import QueuedTask
 
 
 # Include server and editor configurations by default
@@ -68,19 +70,6 @@ EDITABLE_TAGS = {
     "ddc-clean",
     "ddc-rebuild",
 }
-
-
-@dataclass
-class QueuedTask:
-    tag: str
-    config: str
-    platform: str
-    item: QListWidgetItem
-    widget: QWidget
-    bar: QProgressBar
-    edit: QCheckBox
-    clean: bool = False
-    cmd_override: str | None = None
 
 
 class BatchBuilderPanel(QWidget):
