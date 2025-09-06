@@ -55,6 +55,16 @@ DEFAULT_CONFIGS = [
 # Mac is included for editor builds
 DEFAULT_PLATFORMS = ["Win64", "Linux", "Mac", "Android"]
 
+# Tasks that support manual command editing
+EDITABLE_TAGS = {
+    "cook",
+    "stage",
+    "package",
+    "ddc-build",
+    "ddc-clean",
+    "ddc-rebuild",
+}
+
 
 @dataclass
 class QueuedTask:
@@ -186,14 +196,23 @@ class BatchBuilderPanel(QWidget):
         btn_up = QPushButton("Up")
         btn_down = QPushButton("Down")
         btn_remove = QPushButton("Remove")
+        btn_edit_all = QPushButton("Edit All")
         btn_start = QPushButton("Start")
         btn_cancel = QPushButton("Cancel")
         btn_up.clicked.connect(lambda: self._move_task(-1))
         btn_down.clicked.connect(lambda: self._move_task(1))
         btn_remove.clicked.connect(self._remove_task)
+        btn_edit_all.clicked.connect(self._check_all_edits)
         btn_start.clicked.connect(self._start_batch)
         btn_cancel.clicked.connect(self.cancel_batch)
-        for b in (btn_up, btn_down, btn_remove, btn_start, btn_cancel):
+        for b in (
+            btn_up,
+            btn_down,
+            btn_remove,
+            btn_edit_all,
+            btn_start,
+            btn_cancel,
+        ):
             row.addWidget(b)
         queue_layout.addLayout(row)
         layout.addLayout(queue_layout)
@@ -342,7 +361,11 @@ class BatchBuilderPanel(QWidget):
         widget = QWidget()
         row = QHBoxLayout(widget)
         edit_chk = QCheckBox("Edit")
-        edit_chk.setToolTip("Edit command before running")
+        if tag not in EDITABLE_TAGS:
+            edit_chk.setEnabled(False)
+            edit_chk.setToolTip("Manual edit not available")
+        else:
+            edit_chk.setToolTip("Edit command before running")
         row.addWidget(edit_chk)
         label = f"{tag} {cfg_item.text()} {plat_item.text()}"
         if clean:
@@ -392,6 +415,12 @@ class BatchBuilderPanel(QWidget):
             return
         self.tasks.pop(row)
         self.task_list.takeItem(row)
+
+    def _check_all_edits(self) -> None:
+        """Tick edit boxes for all editable tasks."""
+        for task in self.tasks:
+            if task.edit.isEnabled():
+                task.edit.setChecked(True)
 
     def command_preview(self, row: int) -> str:
         if row < 0 or row >= len(self.tasks):
