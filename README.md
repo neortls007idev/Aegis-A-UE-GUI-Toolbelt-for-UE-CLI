@@ -85,7 +85,23 @@ The codebase is organized to keep UI concerns separate from core logic:
 - `aegis/modules` – thin wrappers for Unreal command-line tools.
 - `aegis/ui` – all widgets, pages, and theme assets.
 
-Commands are executed through `TaskRunner` using argv lists; stdout/stderr are streamed to the log panel and the exit code is surfaced to the user.
+Commands are executed through `TaskRunner` using argv lists; stdout/stderr are streamed to the log panel and the exit code is surfaced to the user. Callers may connect to its `started` and `finished` signals and cancel a running task via `cancel()`:
+
+```python
+from aegis.core.task_runner import TaskRunner
+
+runner = TaskRunner()
+runner.started.connect(lambda: print("task started"))
+runner.finished.connect(lambda code: print(f"task exited {code}"))
+
+runner.start(
+    ["echo", "hello"],
+    on_stdout=print,
+    on_stderr=print,
+    on_exit=lambda code: print(f"exit code: {code}"),
+)
+# runner.cancel()  # terminate early
+```
 
 See [docs/architecture.md](docs/architecture.md) for extension points and layout details.
 
