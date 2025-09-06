@@ -22,6 +22,7 @@
 ## Coding standards
 - See `CODING_STANDARDS.md` for detailed guidelines.
 - Run `ruff check .`, `black --check .`, `mypy`, and `PYTHONPATH=$PWD pytest` before pushing.
+- Refer to [docs/architecture.md](docs/architecture.md) for layout and extension points when adding new tools.
 
 ## Pull requests
 - Target `dev` unless fixing a critical issue on `main`.

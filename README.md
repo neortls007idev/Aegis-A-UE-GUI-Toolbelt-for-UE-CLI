@@ -87,6 +87,8 @@ The codebase is organized to keep UI concerns separate from core logic:
 
 Commands are executed through `TaskRunner` using argv lists; stdout/stderr are streamed to the log panel and the exit code is surfaced to the user.
 
+See [docs/architecture.md](docs/architecture.md) for extension points and layout details.
+
 ## Troubleshooting
 
 - **Import errors** – run tests with `PYTHONPATH=$PWD` or install the package in editable mode.
