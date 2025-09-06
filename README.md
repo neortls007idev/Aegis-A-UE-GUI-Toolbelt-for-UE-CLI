@@ -69,5 +69,9 @@ black --check .
 pytest
 ```
 
+Continuous integration runs the same checks on Python 3.11.
+The workflow at `.github/workflows/ci.yml` caches dependencies
+and fails fast if linting or tests fail.
+
 See `CONTRIBUTORS.md` for contributor guidelines.
 
