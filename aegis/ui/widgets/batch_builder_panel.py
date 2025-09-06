@@ -382,7 +382,10 @@ class BatchBuilderPanel(QWidget):
         label = f"{tag} {cfg_item.text()} {plat_item.text()}"
         if clean:
             label += " (clean)"
-        row.addWidget(QLabel(label))
+        lbl = QLabel(label)
+        if tag not in EDITABLE_TAGS:
+            lbl.setEnabled(False)
+        row.addWidget(lbl)
         bar = QProgressBar()
         bar.setRange(0, 1)
         bar.setValue(0)
@@ -417,9 +420,12 @@ class BatchBuilderPanel(QWidget):
             return
         task = self.tasks.pop(row)
         self.tasks.insert(new_row, task)
-        item = self.task_list.takeItem(row)
+        item = self.task_list.item(row)
+        widget = self.task_list.itemWidget(item)
+        widget.setParent(None)
+        self.task_list.takeItem(row)
         self.task_list.insertItem(new_row, item)
-        self.task_list.setItemWidget(item, task.widget)
+        self.task_list.setItemWidget(item, widget)
         self.task_list.setCurrentRow(new_row)
         self.tasks_changed.emit()
 
@@ -430,7 +436,7 @@ class BatchBuilderPanel(QWidget):
         self.tasks.pop(row)
         self.task_list.takeItem(row)
         self.tasks_changed.emit()
-
+        
     def _check_all_edits(self) -> None:
         """Tick edit boxes for all editable tasks."""
         for task in self.tasks:
@@ -476,7 +482,7 @@ class BatchBuilderPanel(QWidget):
         if self.current_index != -1 or not self.tasks:
             return
         for task in self.tasks:
-            if task.edit.isChecked():
+            if task.edit.isChecked() and task.tag in EDITABLE_TAGS:
                 try:
                     preview_argv = self._argv_for(task, preview=True)
                     default_cmd = task.cmd_override or " ".join(
@@ -495,7 +501,8 @@ class BatchBuilderPanel(QWidget):
                     task.item.setToolTip(task.cmd_override)
                 else:
                     task.item.setToolTip(default_cmd)
-                task.edit.setChecked(False)
+            task.edit.setChecked(False)
+
         self.tasks_changed.emit()
         self.current_index = -1
         self.cancel_requested = False
