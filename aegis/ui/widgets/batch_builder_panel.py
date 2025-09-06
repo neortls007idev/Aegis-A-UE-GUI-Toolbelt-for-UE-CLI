@@ -436,7 +436,7 @@ class BatchBuilderPanel(QWidget):
         for task in self.tasks:
             if task.edit.isEnabled():
                 task.edit.setChecked(True)
-
+                
     def command_preview(self, row: int) -> str:
         if row < 0 or row >= len(self.tasks):
             return ""
