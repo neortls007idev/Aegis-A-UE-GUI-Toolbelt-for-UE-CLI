@@ -226,6 +226,28 @@ class MainWindow(QMainWindow):
             self.command_edit.blockSignals(True)
             item.setText(self.batch_panel.command_preview(row))
             self.command_edit.blockSignals(False)
+=======
+        lines: list[str] = []
+        for i, cmd in enumerate(cmds, start=1):
+            prefix = f"{i}: "
+            if not self.batch_panel.task_is_editable(i - 1):
+                prefix += "[locked] "
+            lines.append(prefix + cmd)
+        text = "\n".join(lines)
+        self.command_edit.blockSignals(True)
+        self.command_edit.setPlainText(text)
+        self.command_edit.blockSignals(False)
+
+    def _command_preview_changed(self) -> None:
+        lines = self.command_edit.toPlainText().splitlines()
+        for i, line in enumerate(lines):
+            if ":" in line:
+                _, cmd_part = line.split(":", 1)
+                cmd = cmd_part.strip()
+            else:
+                cmd = line.strip()
+            if self.batch_panel.task_is_editable(i):
+                self.batch_panel.set_command_override(i, cmd, emit=False)
         self.batch_panel.tasks_changed.emit()
 
     # ----- Menus -----
