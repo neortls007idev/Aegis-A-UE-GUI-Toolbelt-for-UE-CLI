@@ -19,7 +19,9 @@ from aegis.core.profile import Profile
 class ProfileEditor(QDialog):
     """Dialog for creating or editing a :class:`Profile`."""
 
-    def __init__(self, profile: Profile | None = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, profile: Profile | None = None, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Profile")
 
@@ -79,4 +81,3 @@ class ProfileEditor(QDialog):
             project_dir=Path(self.project_edit.text()),
             nickname=self.nickname_edit.text().strip(),
         )
-
