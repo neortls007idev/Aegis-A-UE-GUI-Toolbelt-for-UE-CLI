@@ -50,6 +50,8 @@ class ScopeGroup:
     box: QGroupBox
     cmdlet_cb: QComboBox
     add_btn: QPushButton
+    edit_btn: QPushButton
+    remove_btn: QPushButton
     packages_le: QLineEdit
     maps_le: QLineEdit
     collection_le: QLineEdit
@@ -61,9 +63,15 @@ def create_scope_group(commandlets: list[str]) -> ScopeGroup:
     cmdlet_cb.setObjectName("cmdlet_cb")
     add_btn = QPushButton("Add")
     add_btn.setObjectName("add_cmdlet_btn")
+    edit_btn = QPushButton("Edit")
+    edit_btn.setObjectName("edit_cmdlet_btn")
+    remove_btn = QPushButton("Remove")
+    remove_btn.setObjectName("remove_cmdlet_btn")
     row_cmdlet = QHBoxLayout()
     row_cmdlet.addWidget(cmdlet_cb)
     row_cmdlet.addWidget(add_btn)
+    row_cmdlet.addWidget(edit_btn)
+    row_cmdlet.addWidget(remove_btn)
     packages_le = QLineEdit()
     maps_le = QLineEdit()
     collection_le = QLineEdit()
@@ -74,7 +82,16 @@ def create_scope_group(commandlets: list[str]) -> ScopeGroup:
     form.addRow("Collection", collection_le)
     box = QGroupBox("Commandlet & Scope")
     box.setLayout(form)
-    return ScopeGroup(box, cmdlet_cb, add_btn, packages_le, maps_le, collection_le)
+    return ScopeGroup(
+        box,
+        cmdlet_cb,
+        add_btn,
+        edit_btn,
+        remove_btn,
+        packages_le,
+        maps_le,
+        collection_le,
+    )
 
 
 @dataclass
@@ -100,6 +117,8 @@ def create_flags_group() -> FlagsGroup:
     flag_utf8.setChecked(True)
     extra_le = QLineEdit()
     grid = QGridLayout()
+    grid.setHorizontalSpacing(5)
+    grid.setVerticalSpacing(5)
     grid.addWidget(flag_unatt, 0, 0)
     grid.addWidget(flag_nop4, 0, 1)
     grid.addWidget(flag_nullrhi, 0, 2)

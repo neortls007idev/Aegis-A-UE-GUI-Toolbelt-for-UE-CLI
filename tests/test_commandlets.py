@@ -47,3 +47,15 @@ def test_commandlet_list_roundtrip(tmp_path: Path) -> None:
     save_commandlets(proj, cmds)
     loaded = load_commandlets(proj)
     assert "CustomCmd" in loaded
+
+
+def test_commandlet_remove(tmp_path: Path) -> None:
+    proj = tmp_path / "Game.uproject"
+    proj.write_text("", encoding="utf-8")
+    cmds = load_commandlets(proj)
+    cmds.append("TempCmd")
+    save_commandlets(proj, cmds)
+    cmds.remove("TempCmd")
+    save_commandlets(proj, cmds)
+    loaded = load_commandlets(proj)
+    assert "TempCmd" not in loaded
