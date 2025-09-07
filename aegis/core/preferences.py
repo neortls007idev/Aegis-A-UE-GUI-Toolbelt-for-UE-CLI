@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+import logging
 from pathlib import Path
 
 PREFERENCES_FILE = Path(__file__).resolve().parents[2] / "app_preferences" / "app.json"
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -23,7 +27,8 @@ class AppPreferences:
         if path.is_file():
             try:
                 data = json.loads(path.read_text())
-            except Exception:
+            except json.JSONDecodeError as err:
+                logger.warning("Failed to load preferences from %s: %s", path, err)
                 data = {}
         prefs = cls()
         for key, value in data.items():
