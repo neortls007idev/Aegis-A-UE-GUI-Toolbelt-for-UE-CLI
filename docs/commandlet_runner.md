@@ -11,12 +11,12 @@ A dockable panel that turns Unreal commandlets into one-click actions with a cop
 
 ## UI Layout
 1. **Paths & Target**
-   - Browse and validate paths to `UnrealEditor-Cmd.exe` and the target project.
+   - Browse and validate paths to `UnrealEditor-Cmd.exe` and the target project in a single row.
 2. **Commandlet & Scope**
-   - Dropdown of common commandlets (ResavePackages, FixupRedirects, AssetAudit, SizeMap, GatherText).
+   - Dropdown of common commandlets with an **Add** button for project-specific entries.
    - Inputs for packages/paths, collections, and maps with wildcard support.
 3. **Behavior Flags**
-   - Common toggles: `-unattended`, `-nop4`, `-NullRHI`, `-stdout`, `-UTF8Output`.
+   - Common toggles laid out horizontally: `-unattended`, `-nop4`, `-NullRHI`, `-stdout`, `-UTF8Output`.
    - Free-form extra arguments appended verbatim.
 4. **Run Controls**
    - **Dry Run** – compose and show the final CLI without executing.
@@ -27,6 +27,7 @@ A dockable panel that turns Unreal commandlets into one-click actions with a cop
    - Output streams to the main log panel with search and filtering.
 6. **Recipes**
    - Save/load JSON recipes at `<uproject>/.aegies/recipes/commandlets/*.json`.
+   - Custom commandlets persist at `<uproject>/.aegies/commandlets.json`.
    - Auto-save last used settings per profile.
 
 ## Command Construction

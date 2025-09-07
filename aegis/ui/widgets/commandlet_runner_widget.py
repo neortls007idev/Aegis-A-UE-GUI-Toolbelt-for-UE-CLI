@@ -6,7 +6,13 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QInputDialog,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
@@ -14,9 +20,11 @@ from aegis.modules.commandlets import (
     CommandletFlags,
     CommandletRecipe,
     build_argv,
+    load_commandlets,
     load_recipe,
     preview_command,
     recipes_dir,
+    save_commandlets,
     save_recipe,
 )
 from . import commandlet_runner_groups as crg
@@ -35,7 +43,8 @@ class CommandletRunnerWidget(QWidget):
         self.profile: Profile | None = None
 
         self.paths: crg.PathsGroup = crg.create_paths_group(self._browse)
-        self.scope: crg.ScopeGroup = crg.create_scope_group()
+        self.scope: crg.ScopeGroup = crg.create_scope_group(load_commandlets(None))
+        self.scope.add_btn.clicked.connect(self._add_cmdlet)
         self.flags: crg.FlagsGroup = crg.create_flags_group()
         self.controls: crg.RunControls = crg.create_run_controls(
             lambda: QGuiApplication.clipboard().setText(
@@ -78,6 +87,15 @@ class CommandletRunnerWidget(QWidget):
         ):
             root.addWidget(box)
 
+    def _load_cmdlets(self) -> None:
+        proj = self.paths.proj_le.text()
+        cmdlets = load_commandlets(Path(proj)) if proj else load_commandlets(None)
+        current = self.scope.cmdlet_cb.currentText()
+        self.scope.cmdlet_cb.clear()
+        self.scope.cmdlet_cb.addItems(cmdlets)
+        if current in cmdlets:
+            self.scope.cmdlet_cb.setCurrentText(current)
+
     def _browse(self, le: QLineEdit, uproject: bool = False) -> None:
         if uproject:
             path, _ = QFileDialog.getOpenFileName(
@@ -89,7 +107,23 @@ class CommandletRunnerWidget(QWidget):
             )
         if path:
             le.setText(path)
+            if uproject:
+                self._load_cmdlets()
             self._dry_run()
+
+    def _add_cmdlet(self) -> None:
+        name, ok = QInputDialog.getText(self, "Add Commandlet", "Commandlet name:")
+        if ok and name:
+            if self.scope.cmdlet_cb.findText(name) == -1:
+                self.scope.cmdlet_cb.addItem(name)
+            self.scope.cmdlet_cb.setCurrentText(name)
+            proj = self.paths.proj_le.text()
+            if proj:
+                cmds = [
+                    self.scope.cmdlet_cb.itemText(i)
+                    for i in range(self.scope.cmdlet_cb.count())
+                ]
+                save_commandlets(Path(proj), cmds)
 
     def _recipe(self) -> CommandletRecipe:
         flags = CommandletFlags(
@@ -151,6 +185,8 @@ class CommandletRunnerWidget(QWidget):
             save_recipe(Path(self.paths.proj_le.text()), name, self._recipe())
 
     def _apply_recipe(self, r: CommandletRecipe) -> None:
+        if self.scope.cmdlet_cb.findText(r.commandlet) == -1:
+            self.scope.cmdlet_cb.addItem(r.commandlet)
         self.scope.cmdlet_cb.setCurrentText(r.commandlet)
         for le, text in [
             (self.scope.packages_le, ";".join(r.packages)),
@@ -189,4 +225,5 @@ class CommandletRunnerWidget(QWidget):
             for p in profile.project_dir.glob("*.uproject"):
                 self.paths.proj_le.setText(str(p))
                 break
+            self._load_cmdlets()
             self._dry_run()

@@ -9,6 +9,15 @@ from pathlib import Path
 from typing import List
 
 
+DEFAULT_COMMANDLETS = [
+    "ResavePackages",
+    "FixupRedirects",
+    "AssetAudit",
+    "SizeMap",
+    "GatherText",
+]
+
+
 @dataclass
 class CommandletFlags:
     """Common commandlet behavior flags."""
@@ -109,3 +118,38 @@ def load_recipe(path: Path) -> CommandletRecipe:
     """Load a commandlet recipe from ``path``."""
 
     return CommandletRecipe.from_json(path.read_text(encoding="utf-8"))
+
+
+def commandlets_file(uproject: Path) -> Path:
+    """Return the path storing custom commandlets for ``uproject``."""
+
+    return uproject.parent / ".aegies" / "commandlets.json"
+
+
+def load_commandlets(uproject: Path | None) -> list[str]:
+    """Return default commandlets plus any project-specific additions."""
+
+    cmds = list(DEFAULT_COMMANDLETS)
+    if not uproject:
+        return cmds
+    path = commandlets_file(uproject)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                for cmd in data:
+                    if cmd not in cmds:
+                        cmds.append(cmd)
+        except json.JSONDecodeError:
+            pass
+    return cmds
+
+
+def save_commandlets(uproject: Path, commandlets: list[str]) -> Path:
+    """Persist custom commandlets for ``uproject``."""
+
+    path = commandlets_file(uproject)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    custom = [c for c in commandlets if c not in DEFAULT_COMMANDLETS]
+    path.write_text(json.dumps(sorted(custom), indent=2), encoding="utf-8")
+    return path
