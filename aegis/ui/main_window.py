@@ -34,6 +34,11 @@ from aegis.ui.widgets.feedback_dialog import FeedbackDialog
 from aegis.ui.widgets.help_dialog import HelpDialog
 from aegis.ui.widgets.log_panel import LogPanel
 from aegis.ui.menu_builder import build_menu
+from aegis.ui.layout_persistence import (
+    clamp_rect_to_available,
+    restore_window_geometry,
+    save_window_geometry,
+)
 
 
 class MainWindow(
@@ -88,12 +93,18 @@ class MainWindow(
         self.profile = None
         self.actions: dict[str, QAction] = build_menu(self)
         self._apply_key_bindings()
-        self._apply_saved_layout()
+        restore_window_geometry(self, settings.s, key_prefix="ui")
         self._apply_saved_theme()
         self._load_last_profile()
         QGuiApplication.styleHints().colorSchemeChanged.connect(
             self._on_system_theme_change
         )
+        if self.windowHandle():
+            self.windowHandle().screenChanged.connect(
+                lambda _: self.setGeometry(
+                    clamp_rect_to_available(self.frameGeometry(), self)
+                )
+            )
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
         """Ensure log panel width tracks window size."""
@@ -207,8 +218,7 @@ class MainWindow(
             self.prefs.width = self.width()
             self.prefs.height = self.height()
         self.prefs.save()
-        settings.save_geometry(self.saveGeometry())
-        settings.save_state(self.saveState())
+        save_window_geometry(self, settings.s, key_prefix="ui")
         super().closeEvent(ev)
 
     def _toggle_docking(self, checked: bool) -> None:
