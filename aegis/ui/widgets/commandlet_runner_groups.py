@@ -50,9 +50,14 @@ class ScopeGroup:
     add_btn: QPushButton
     edit_btn: QPushButton
     remove_btn: QPushButton
+    project_le: QLineEdit
+    project_browse_btn: QPushButton
     packages_le: QLineEdit
+    packages_browse_btn: QPushButton
     maps_le: QLineEdit
+    maps_browse_btn: QPushButton
     collection_le: QLineEdit
+    collection_browse_btn: QPushButton
 
 
 def create_scope_group(commandlets: list[str]) -> ScopeGroup:
@@ -70,14 +75,32 @@ def create_scope_group(commandlets: list[str]) -> ScopeGroup:
     row_cmdlet.addWidget(add_btn)
     row_cmdlet.addWidget(edit_btn)
     row_cmdlet.addWidget(remove_btn)
+    project_le = QLineEdit()
+    project_browse = QPushButton("Browse")
+    row_project = QHBoxLayout()
+    row_project.addWidget(project_le, 1)
+    row_project.addWidget(project_browse)
     packages_le = QLineEdit()
+    packages_browse = QPushButton("Browse")
+    row_packages = QHBoxLayout()
+    row_packages.addWidget(packages_le, 1)
+    row_packages.addWidget(packages_browse)
     maps_le = QLineEdit()
+    maps_browse = QPushButton("Browse")
+    row_maps = QHBoxLayout()
+    row_maps.addWidget(maps_le, 1)
+    row_maps.addWidget(maps_browse)
     collection_le = QLineEdit()
+    collection_browse = QPushButton("Browse")
+    row_collection = QHBoxLayout()
+    row_collection.addWidget(collection_le, 1)
+    row_collection.addWidget(collection_browse)
     form = QFormLayout()
     form.addRow("Commandlet:", row_cmdlet)
-    form.addRow("Packages/Paths (;)", packages_le)
-    form.addRow("Maps (;)", maps_le)
-    form.addRow("Collection", collection_le)
+    form.addRow("Project", row_project)
+    form.addRow("Packages/Paths (;)", row_packages)
+    form.addRow("Maps (;)", row_maps)
+    form.addRow("Collection", row_collection)
     box = QGroupBox("Commandlet & Scope")
     box.setLayout(form)
     return ScopeGroup(
@@ -86,9 +109,14 @@ def create_scope_group(commandlets: list[str]) -> ScopeGroup:
         add_btn,
         edit_btn,
         remove_btn,
+        project_le,
+        project_browse,
         packages_le,
+        packages_browse,
         maps_le,
+        maps_browse,
         collection_le,
+        collection_browse,
     )
 
 

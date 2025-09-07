@@ -48,6 +48,11 @@ class CommandletRunnerWidget(QWidget):
         self.scope.add_btn.clicked.connect(self._add_cmdlet)
         self.scope.edit_btn.clicked.connect(self._edit_cmdlet)
         self.scope.remove_btn.clicked.connect(self._remove_cmdlet)
+        self.scope.project_browse_btn.clicked.connect(self._browse_project)
+        self.scope.packages_browse_btn.clicked.connect(self._browse_packages)
+        self.scope.maps_browse_btn.clicked.connect(self._browse_maps)
+        self.scope.collection_browse_btn.clicked.connect(self._browse_collection)
+        self.scope.project_le.textChanged.connect(self._project_changed)
         self.flags: crg.FlagsGroup = crg.create_flags_group()
         self.controls: crg.RunControls = crg.create_run_controls(
             lambda: QGuiApplication.clipboard().setText(
@@ -63,9 +68,14 @@ class CommandletRunnerWidget(QWidget):
 
         self.inputs = [
             self.scope.cmdlet_cb,
+            self.scope.project_le,
+            self.scope.project_browse_btn,
             self.scope.packages_le,
+            self.scope.packages_browse_btn,
             self.scope.maps_le,
+            self.scope.maps_browse_btn,
             self.scope.collection_le,
+            self.scope.collection_browse_btn,
             self.scope.add_btn,
             self.scope.edit_btn,
             self.scope.remove_btn,
@@ -148,6 +158,37 @@ class CommandletRunnerWidget(QWidget):
                 for i in range(self.scope.cmdlet_cb.count())
             ]
             save_commandlets(proj, cmds)
+        self._dry_run()
+
+    def _browse_project(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Project", "", "Unreal Project (*.uproject)"
+        )
+        if path:
+            self.scope.project_le.setText(path)
+
+    def _browse_packages(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Package Path")
+        if path:
+            current = self.scope.packages_le.text().strip()
+            sep = ";" if current else ""
+            self.scope.packages_le.setText(f"{current}{sep}{path}")
+
+    def _browse_maps(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Map", "", "Map Files (*.umap)")
+        if path:
+            current = self.scope.maps_le.text().strip()
+            sep = ";" if current else ""
+            self.scope.maps_le.setText(f"{current}{sep}{path}")
+
+    def _browse_collection(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Collection", "", "*")
+        if path:
+            self.scope.collection_le.setText(path)
+
+    def _project_changed(self, text: str) -> None:
+        self.uproject = Path(text) if text else None
+        self._load_cmdlets()
         self._dry_run()
 
     def _recipe(self) -> CommandletRecipe:
@@ -252,12 +293,14 @@ class CommandletRunnerWidget(QWidget):
             for p in profile.project_dir.glob("*.uproject"):
                 self.uproject = p
                 break
+            self.scope.project_le.setText(str(self.uproject) if self.uproject else "")
             self._load_cmdlets()
             self._dry_run()
         else:
             self.paths.exe_lbl.setText("(no profile)")
             self.exe_path = None
             self.uproject = None
+            self.scope.project_le.setText("")
 
     def _rebuild_editor(self) -> None:
         if not self.profile:

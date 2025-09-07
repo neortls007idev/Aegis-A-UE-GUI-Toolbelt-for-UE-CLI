@@ -32,6 +32,7 @@ def test_autopick_paths(tmp_path: Path, qtbot) -> None:
     widget.update_profile(profile)
     assert widget.paths.exe_lbl.text() == str(exe)
     assert widget.uproject == uproj
+    assert widget.scope.project_le.text() == str(uproj)
     assert not widget.controls.preview_le.isReadOnly()
 
 
@@ -90,6 +91,25 @@ def test_run_manual_preview(tmp_path: Path, qtbot, monkeypatch) -> None:
     widget.controls.preview_le.setText("echo hi")
     widget._run()
     assert called["argv"] == ["echo", "hi"]
+
+
+def test_override_project_path(tmp_path: Path, qtbot) -> None:
+    engine = tmp_path / "UE"
+    bin_dir = engine / "Engine" / "Binaries" / "Win64"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "UnrealEditor-Cmd.exe").write_text("x")
+    proj_dir = tmp_path / "Proj"
+    proj_dir.mkdir()
+    (proj_dir / "Game.uproject").write_text("x")
+    other = tmp_path / "Other" / "Other.uproject"
+    other.parent.mkdir()
+    other.write_text("x")
+    profile = Profile(engine_root=engine, project_dir=proj_dir)
+    widget = CommandletRunnerWidget(TaskRunner(), _noop_log)
+    qtbot.addWidget(widget)
+    widget.update_profile(profile)
+    widget.scope.project_le.setText(str(other))
+    assert widget.uproject == other
 
 
 def test_rebuild_editor_invokes_ubt(tmp_path: Path, qtbot, monkeypatch) -> None:

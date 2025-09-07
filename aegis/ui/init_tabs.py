@@ -59,7 +59,7 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
     uaft_layout = QVBoxLayout(uaft_container)
     uaft_layout.addWidget(uaft_panel, 1)
 
-    pak_panel = PakIoStorePanel()
+    pak_panel = PakIoStorePanel(runner)
     cmd_panel = CommandletRunnerWidget(runner, log_cb)
 
     tests_tabs = QTabWidget()

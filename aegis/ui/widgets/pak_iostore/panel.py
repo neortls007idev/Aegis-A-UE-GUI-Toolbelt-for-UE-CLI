@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -16,6 +16,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from aegis.core.task_runner import TaskRunner
+from aegis.modules.ubt import Ubt
 
 from aegis.core.profile import Profile
 from aegis.core.settings import settings
@@ -28,10 +31,11 @@ from .worker import PakWorker
 class PakIoStorePanel(QWidget):
     """Panel handling Pak/IoStore operations."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, runner: TaskRunner, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("tab_pak")
 
+        self.runner = runner
         self.profile: Profile | None = None
         self.unrealpak_path: Path | None = None
         self.iostore_path: Path | None = None
@@ -81,23 +85,25 @@ class PakIoStorePanel(QWidget):
         root = QVBoxLayout(self)
 
         tools_box = QGroupBox("Tool Paths")
-        tl = QVBoxLayout()
-        self.unrealpak_label = QLabel("UnrealPak: (not found)")
+        tl = QHBoxLayout()
+        tl.setContentsMargins(2, 2, 2, 2)
+        tl.setSpacing(2)
+        self.unrealpak_label = QLabel("(not found)")
         self.unrealpak_label.setObjectName("unrealpak_label")
         self.unrealpak_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.unrealpak_browse = QPushButton("Browse")
-        r1 = QHBoxLayout()
-        r1.addWidget(self.unrealpak_label, 1)
-        r1.addWidget(self.unrealpak_browse)
-        tl.addLayout(r1)
-        self.iostore_label = QLabel("IoStore: (not found)")
+        self.rebuild_pak_btn = QPushButton("Rebuild & Fix")
+        self.rebuild_pak_btn.setObjectName("rebuild_unrealpak_btn")
+        tl.addWidget(QLabel("UnrealPak:"))
+        tl.addWidget(self.unrealpak_label, 1)
+        tl.addWidget(self.rebuild_pak_btn)
+        self.iostore_label = QLabel("(not found)")
         self.iostore_label.setObjectName("iostore_label")
         self.iostore_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.iostore_browse = QPushButton("Browse")
-        r2 = QHBoxLayout()
-        r2.addWidget(self.iostore_label, 1)
-        r2.addWidget(self.iostore_browse)
-        tl.addLayout(r2)
+        self.rebuild_iostore_btn = QPushButton("Rebuild & Fix")
+        self.rebuild_iostore_btn.setObjectName("rebuild_iostore_btn")
+        tl.addWidget(QLabel("IoStore:"))
+        tl.addWidget(self.iostore_label, 1)
+        tl.addWidget(self.rebuild_iostore_btn)
         tools_box.setLayout(tl)
         root.addWidget(tools_box)
 
@@ -123,26 +129,54 @@ class PakIoStorePanel(QWidget):
 
     # ----- Connections -----------------------------------------------
     def _connect(self) -> None:
-        self.unrealpak_browse.clicked.connect(self._pick_unrealpak)
-        self.iostore_browse.clicked.connect(self._pick_iostore)
+        self.rebuild_pak_btn.clicked.connect(self._rebuild_unrealpak)
+        self.rebuild_iostore_btn.clicked.connect(self._rebuild_iostore)
         self.eula_chk.toggled.connect(self._update_enabled)
 
     # ----- Helpers ---------------------------------------------------
-    def _pick_unrealpak(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "UnrealPak", "", "Executables (*)")
-        if path:
-            self.unrealpak_path = Path(path)
-            self.unrealpak_label.setText(f"UnrealPak: {path}")
-            settings.set_pak_path("unrealpak", path)
+    def _run_ubt(self, argv: list[str]) -> None:
+        self.preview.setPlainText(" ".join(argv))
+        self._log(f"[ubt] {' '.join(argv)}")
 
-    def _pick_iostore(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "IoStoreUtilities", "", "Executables (*)"
+        def done(code: int) -> None:
+            self._log(f"[ubt] exit code {code}")
+            if code == 0:
+                self._scan()
+
+        self.runner.start(
+            argv,
+            on_stdout=lambda s: self._log(f"[ubt] {s}"),
+            on_stderr=lambda s: self._log(f"[ubt] {s}"),
+            on_exit=done,
         )
-        if path:
-            self.iostore_path = Path(path)
-            self.iostore_label.setText(f"IoStore: {path}")
-            settings.set_pak_path("iostore", path)
+
+    def _rebuild_unrealpak(self) -> None:
+        if not self.profile:
+            self._log("[ubt] No profile selected")
+            return
+        ubt = Ubt(self.profile.engine_root, self.profile.project_dir)
+        if sys.platform == "win32":
+            platform = "Win64"
+        elif sys.platform == "darwin":
+            platform = "Mac"
+        else:
+            platform = "Linux"
+        argv = ubt.build_argv("UnrealPak", platform, "Development", clean=True)
+        self._run_ubt(argv)
+
+    def _rebuild_iostore(self) -> None:
+        if not self.profile:
+            self._log("[ubt] No profile selected")
+            return
+        ubt = Ubt(self.profile.engine_root, self.profile.project_dir)
+        if sys.platform == "win32":
+            platform = "Win64"
+        elif sys.platform == "darwin":
+            platform = "Mac"
+        else:
+            platform = "Linux"
+        argv = ubt.build_argv("IoStoreUtilities", platform, "Development", clean=True)
+        self._run_ubt(argv)
 
     def _log(self, text: str) -> None:
         self.log.appendPlainText(text)
@@ -164,8 +198,8 @@ class PakIoStorePanel(QWidget):
         if not profile:
             self.unrealpak_path = None
             self.iostore_path = None
-            self.unrealpak_label.setText("UnrealPak: (no profile)")
-            self.iostore_label.setText("IoStore: (no profile)")
+            self.unrealpak_label.setText("(no profile)")
+            self.iostore_label.setText("(no profile)")
             return
         self._scan()
         proj = profile.project_dir
@@ -202,12 +236,8 @@ class PakIoStorePanel(QWidget):
         if self.iostore_path:
             settings.set_pak_path("iostore", str(self.iostore_path))
         self.unrealpak_label.setText(
-            f"UnrealPak: {self.unrealpak_path}"
-            if self.unrealpak_path
-            else "UnrealPak: (not found)"
+            str(self.unrealpak_path) if self.unrealpak_path else "(not found)"
         )
         self.iostore_label.setText(
-            f"IoStore: {self.iostore_path}"
-            if self.iostore_path
-            else "IoStore: (not found)"
+            str(self.iostore_path) if self.iostore_path else "(not found)"
         )
