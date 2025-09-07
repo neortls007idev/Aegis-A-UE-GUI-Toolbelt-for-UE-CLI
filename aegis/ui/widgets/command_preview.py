@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QLineEdit, QWidget
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QLineEdit, QWidget
 
 
 class CommandPreviewWidget(QWidget):
@@ -13,7 +12,6 @@ class CommandPreviewWidget(QWidget):
         self.line = QLineEdit()
         self.line.setReadOnly(True)
         self.line.setObjectName("command_edit")
-        self.line.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.copy_btn = QPushButton("Copy")
         self.copy_btn.setObjectName("copy_btn")
         layout = QHBoxLayout(self)
@@ -25,5 +23,4 @@ class CommandPreviewWidget(QWidget):
         self.line.setText(cmd)
 
     def _copy(self) -> None:
-        self.line.selectAll()
-        self.line.copy()
+        QApplication.clipboard().setText(self.line.text())
