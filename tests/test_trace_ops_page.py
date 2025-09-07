@@ -17,7 +17,8 @@ def _noop_log(_msg: str, _level: str) -> None:
 def test_profile_auto_paths(tmp_path: Path, qtbot) -> None:
     engine = tmp_path / "UE"
     plat = "Win64" if sys.platform == "win32" else "Linux"
-    bin_dir = engine / "Engine" / "Binaries" / plat
+    bin_root = engine / "Engine" / "Binaries"
+    bin_dir = bin_root / plat
     bin_dir.mkdir(parents=True)
     (
         bin_dir
@@ -29,7 +30,7 @@ def test_profile_auto_paths(tmp_path: Path, qtbot) -> None:
     page = TraceOpsPage(TraceOpsController(), _noop_log)
     qtbot.addWidget(page)
     page.update_profile(profile)
-    assert page.engine_label.text() == str(bin_dir)
+    assert page.engine_label.text() == str(bin_root)
     page.trace_name_edit.setText("MyTrace")
     expected = project_dir / "Unreal Insights" / "MyTrace"
     assert page.store_edit.text() == str(expected)

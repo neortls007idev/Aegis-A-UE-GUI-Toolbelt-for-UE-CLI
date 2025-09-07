@@ -36,8 +36,29 @@ class TraceOpsController:
         self.port = 1981
 
     # ----- Server -----
+    def _find_binary(self, engine_bin: Path, names: Iterable[str]) -> Path | None:
+        candidates = [engine_bin / name for name in names]
+        for sub in engine_bin.iterdir():
+            if sub.is_dir():
+                for name in names:
+                    candidates.append(sub / name)
+        for cand in candidates:
+            if cand.exists():
+                return cand
+        return None
+
+    def find_trace_server_bin(self, engine_bin: Path) -> Path | None:
+        return self._find_binary(
+            engine_bin, ["UnrealTraceServer.exe", "UnrealTraceServer"]
+        )
+
+    def find_insights_bin(self, engine_bin: Path) -> Path | None:
+        return self._find_binary(engine_bin, ["UnrealInsights.exe", "UnrealInsights"])
+
     def server_argv(self, engine_bin: Path, store_dir: Path | None) -> list[str]:
-        exe = engine_bin / "UnrealTraceServer.exe"
+        exe = self.find_trace_server_bin(engine_bin)
+        if not exe:
+            raise FileNotFoundError(f"UnrealTraceServer not found under {engine_bin}")
         argv = [str(exe)]
         if store_dir:
             argv += ["--store", str(store_dir)]
