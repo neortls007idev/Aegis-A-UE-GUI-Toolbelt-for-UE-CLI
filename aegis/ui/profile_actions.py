@@ -15,6 +15,7 @@ from aegis.ui.widgets.pak_iostore_panel import PakIoStorePanel
 from aegis.ui.widgets.commandlet_runner_widget import CommandletRunnerWidget
 from aegis.ui.widgets.gauntlet_panel import GauntletPanel
 from aegis.ui.widgets.buildgraph_panel import BuildGraphPanel
+from aegis.ui.pages.page_trace_ops import TraceOpsPage
 from typing import Callable
 
 
@@ -28,6 +29,7 @@ class ProfileActions:
     commandlet_runner: CommandletRunnerWidget
     gauntlet_panel: GauntletPanel
     buildgraph_panel: BuildGraphPanel
+    trace_ops_page: TraceOpsPage
     _log: Callable[[str, str], None]
     setWindowTitle: Callable[[str], None]
 
@@ -119,3 +121,4 @@ class ProfileActions:
         self.commandlet_runner.update_profile(self.profile)
         self.gauntlet_panel.update_profile(self.profile)
         self.buildgraph_panel.update_profile(self.profile)
+        self.trace_ops_page.update_profile(self.profile)
