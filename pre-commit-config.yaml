@@ -14,9 +14,4 @@ repos:
       - id: mypy
         pass_filenames: false
         args:
-          - aegis/modules
-          - aegis/core
-          - aegis/ui/key_binding_actions.py
-          - aegis/ui/widgets/command_editor.py
-          - aegis/ui/widgets/env_doc.py
-          - aegis/ui/widgets/uaft_panel.py
+          - aegis

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
@@ -13,6 +14,13 @@ LAYOUT_VERSION = 4
 
 
 class ThemeActions:
+    restoreGeometry: Callable[[bytes], bool]
+    setWindowState: Callable[[Qt.WindowState], None]
+    windowState: Callable[[], Qt.WindowState]
+    _reset_layout: Callable[[], None]
+    restoreState: Callable[[bytes], bool]
+    setStyleSheet: Callable[[str], None]
+
     def _set_theme(self, mode: str) -> None:
         settings.set_theme_mode(mode)
         self._apply_theme()

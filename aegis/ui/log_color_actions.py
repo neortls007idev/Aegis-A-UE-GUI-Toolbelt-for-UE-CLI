@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from aegis.ui.widgets.log_colors_editor import LogColorsEditor
+from aegis.ui.widgets.log_panel import LogPanel
 
 
 class LogColorActions:
     """Actions for editing and persisting log color settings."""
 
+    log_panel: LogPanel
+
     def _edit_log_colors(self) -> None:
         cfg = self.log_panel.log_colors.all()
-        orig_levels = cfg["levels"]
+        orig_levels = cast(dict[str, str], cfg["levels"])
         orig_regex = self.log_panel.log_colors.regex_rules()
         dlg = LogColorsEditor(
             orig_levels,

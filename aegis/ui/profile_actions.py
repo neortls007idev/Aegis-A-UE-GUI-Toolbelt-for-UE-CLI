@@ -7,10 +7,21 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from aegis.core.profile import Profile
 from aegis.core.settings import settings
 from aegis.ui.widgets.profile_editor import ProfileEditor
+from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
+from aegis.ui.widgets.env_doc import EnvDocPanel
+from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
+from aegis.ui.widgets.uaft_panel import UaftPanel
+from typing import Callable
 
 
 class ProfileActions:
     profile: Profile | None
+    info_bar: ProfileInfoBar
+    env_doc: EnvDocPanel
+    batch_panel: BatchBuilderPanel
+    uaft_panel: UaftPanel
+    _log: Callable[[str, str], None]
+    setWindowTitle: Callable[[str], None]
 
     def _new_profile(self) -> None:
         dlg = ProfileEditor(parent=self)
