@@ -4,7 +4,9 @@ from aegis.modules.commandlets import (
     CommandletFlags,
     CommandletRecipe,
     build_argv,
+    load_commandlets,
     load_recipe,
+    save_commandlets,
     save_recipe,
 )
 
@@ -34,3 +36,14 @@ def test_recipe_roundtrip(tmp_path: Path) -> None:
     path = save_recipe(proj, "sample", recipe)
     loaded = load_recipe(path)
     assert loaded == recipe
+
+
+def test_commandlet_list_roundtrip(tmp_path: Path) -> None:
+    proj = tmp_path / "Game.uproject"
+    proj.write_text("", encoding="utf-8")
+    cmds = load_commandlets(proj)
+    assert "ResavePackages" in cmds
+    cmds.append("CustomCmd")
+    save_commandlets(proj, cmds)
+    loaded = load_commandlets(proj)
+    assert "CustomCmd" in loaded

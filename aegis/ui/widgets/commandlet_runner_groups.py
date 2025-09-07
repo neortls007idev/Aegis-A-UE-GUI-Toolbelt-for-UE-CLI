@@ -7,20 +7,14 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QVBoxLayout,
 )
-
-COMMANDLETS = [
-    "ResavePackages",
-    "FixupRedirects",
-    "AssetAudit",
-    "SizeMap",
-    "GatherText",
-]
 
 
 @dataclass
@@ -39,17 +33,15 @@ def create_paths_group(browse_cb: Callable[[QLineEdit, bool], None]) -> PathsGro
     btn_exe.clicked.connect(lambda: browse_cb(exe_le, False))
     btn_proj = QPushButton("Browse…")
     btn_proj.clicked.connect(lambda: browse_cb(proj_le, True))
-    re = QHBoxLayout()
-    re.addWidget(exe_le)
-    re.addWidget(btn_exe)
-    rp = QHBoxLayout()
-    rp.addWidget(proj_le)
-    rp.addWidget(btn_proj)
-    form = QFormLayout()
-    form.addRow("UnrealEditor-Cmd.exe:", re)
-    form.addRow("Project:", rp)
+    grid = QGridLayout()
+    grid.addWidget(QLabel("UnrealEditor-Cmd.exe:"), 0, 0)
+    grid.addWidget(exe_le, 0, 1)
+    grid.addWidget(btn_exe, 0, 2)
+    grid.addWidget(QLabel("Project:"), 0, 3)
+    grid.addWidget(proj_le, 0, 4)
+    grid.addWidget(btn_proj, 0, 5)
     box = QGroupBox("Paths & Target")
-    box.setLayout(form)
+    box.setLayout(grid)
     return PathsGroup(box, exe_le, proj_le)
 
 
@@ -57,26 +49,32 @@ def create_paths_group(browse_cb: Callable[[QLineEdit, bool], None]) -> PathsGro
 class ScopeGroup:
     box: QGroupBox
     cmdlet_cb: QComboBox
+    add_btn: QPushButton
     packages_le: QLineEdit
     maps_le: QLineEdit
     collection_le: QLineEdit
 
 
-def create_scope_group() -> ScopeGroup:
+def create_scope_group(commandlets: list[str]) -> ScopeGroup:
     cmdlet_cb = QComboBox()
-    cmdlet_cb.addItems(COMMANDLETS)
+    cmdlet_cb.addItems(commandlets)
     cmdlet_cb.setObjectName("cmdlet_cb")
+    add_btn = QPushButton("Add")
+    add_btn.setObjectName("add_cmdlet_btn")
+    row_cmdlet = QHBoxLayout()
+    row_cmdlet.addWidget(cmdlet_cb)
+    row_cmdlet.addWidget(add_btn)
     packages_le = QLineEdit()
     maps_le = QLineEdit()
     collection_le = QLineEdit()
     form = QFormLayout()
-    form.addRow("Commandlet:", cmdlet_cb)
+    form.addRow("Commandlet:", row_cmdlet)
     form.addRow("Packages/Paths (;)", packages_le)
     form.addRow("Maps (;)", maps_le)
     form.addRow("Collection", collection_le)
     box = QGroupBox("Commandlet & Scope")
     box.setLayout(form)
-    return ScopeGroup(box, cmdlet_cb, packages_le, maps_le, collection_le)
+    return ScopeGroup(box, cmdlet_cb, add_btn, packages_le, maps_le, collection_le)
 
 
 @dataclass
@@ -101,18 +99,16 @@ def create_flags_group() -> FlagsGroup:
     flag_utf8 = QCheckBox("-UTF8Output")
     flag_utf8.setChecked(True)
     extra_le = QLineEdit()
-    form = QFormLayout()
-    for cb in (
-        flag_unatt,
-        flag_nop4,
-        flag_nullrhi,
-        flag_stdout,
-        flag_utf8,
-    ):
-        form.addRow(cb)
-    form.addRow("Extra Args", extra_le)
+    grid = QGridLayout()
+    grid.addWidget(flag_unatt, 0, 0)
+    grid.addWidget(flag_nop4, 0, 1)
+    grid.addWidget(flag_nullrhi, 0, 2)
+    grid.addWidget(flag_stdout, 1, 0)
+    grid.addWidget(flag_utf8, 1, 1)
+    grid.addWidget(QLabel("Extra Args"), 2, 0)
+    grid.addWidget(extra_le, 2, 1, 1, 2)
     box = QGroupBox("Behavior Flags")
-    box.setLayout(form)
+    box.setLayout(grid)
     return FlagsGroup(
         box,
         flag_unatt,
