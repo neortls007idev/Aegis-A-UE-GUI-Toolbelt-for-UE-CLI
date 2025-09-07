@@ -60,13 +60,21 @@ class TaskRunner(QObject):
         if self._proc:
             raise RuntimeError("A task is already running")
 
-        self._proc = subprocess.Popen(
-            argv,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            shell=False,
-        )
+        try:
+            self._proc = subprocess.Popen(
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=False,
+            )
+        except OSError as exc:
+            code = exc.errno or 1
+            on_stderr(str(exc))
+            on_exit(code)
+            self.finished.emit(code)
+            return
+
         self.started.emit()
 
         def pump(stream, cb):
