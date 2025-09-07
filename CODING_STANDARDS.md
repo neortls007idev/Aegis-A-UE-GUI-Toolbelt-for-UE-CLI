@@ -6,7 +6,9 @@
 - **Type hints**: required for all functions and methods.
 - **Formatting**: `black` for code style, `ruff` for linting.
 - **Type checking**: `mypy` run against all packages.
-- **Naming**: snake_case for functions and variables; PascalCase for classes; file names in snake_case.
+- **Naming**:
+  - Python: snake_case for functions and variables; PascalCase for classes; file names in snake_case.
+  - C++: methods and free functions use PascalCase; data members prefix `m` and use CamelCase.
 - **Subprocesses**: never use `shell=True`; pass `argv` lists and stream stdout/stderr.
 - **UI threads**: long-running tasks must not block the GUI thread; use background threads for subprocess streaming.
 - **Logging**: redact secrets or tokens; surface exit codes and errors.
@@ -19,3 +21,6 @@
 - **Naming**: methods and free functions use PascalCase. Variables use camelCase; data members are prefixed with `m`. File names use PascalCase.
 - **Braces**: opening braces appear on their own line (Allman style).
 - **Conditionals**: format as `if ( condition )` with braces on subsequent lines.
+- Initialize pointers to `nullptr` and verify before use.
+- Format conditionals as:
+- Use `printf` for logging and `scanf` with fixed-size character buffers for input parsing.
