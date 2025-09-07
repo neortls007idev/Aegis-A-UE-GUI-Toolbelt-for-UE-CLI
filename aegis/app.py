@@ -1,10 +1,12 @@
 from PySide6.QtWidgets import QApplication
 import sys
+
 from aegis.core.preferences import preferences
 from aegis.ui.main_window import MainWindow
 
 
-def main():
+def main() -> None:
+    """Launch the Aegis Toolbelt application."""
     app = QApplication(sys.argv)
     w = MainWindow()
     if preferences.launch_maximized:

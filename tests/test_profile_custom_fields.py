@@ -3,7 +3,7 @@ from pathlib import Path
 from aegis.core.profile import Profile
 
 
-def test_profile_roundtrip(tmp_path):
+def test_profile_roundtrip(tmp_path: Path) -> None:
     path = tmp_path / "profile.json"
     prof = Profile(
         engine_root=Path("/Engine"),
