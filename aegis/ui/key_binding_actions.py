@@ -1,7 +1,10 @@
+"""Mixin that adds import/export actions for keyboard shortcuts."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from aegis.core.settings import settings
@@ -9,6 +12,8 @@ from aegis.ui.widgets.key_bindings_editor import KeyBindingsEditor
 
 
 class KeyBindingActions:
+    actions: dict[str, QAction]
+
     def _apply_key_bindings(self) -> None:
         kb = settings.key_bindings
         for action_id, act in self.actions.items():

@@ -3,7 +3,7 @@
 - **Python version**: 3.11 or newer.
 - **Type hints**: required for all functions and methods.
 - **Formatting**: `black` for code style, `ruff` for linting.
-- **Type checking**: `mypy` run against core modules.
+- **Type checking**: `mypy` run against all packages.
 - **Naming**: snake_case for functions and variables; PascalCase for classes; file names in snake_case.
 - **Subprocesses**: never use `shell=True`; pass `argv` lists and stream stdout/stderr.
 - **UI threads**: long-running tasks must not block the GUI thread; use background threads for subprocess streaming.

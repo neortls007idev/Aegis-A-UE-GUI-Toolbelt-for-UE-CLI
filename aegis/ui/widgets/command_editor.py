@@ -1,3 +1,5 @@
+"""Read-only table showing command previews for queued tasks."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt

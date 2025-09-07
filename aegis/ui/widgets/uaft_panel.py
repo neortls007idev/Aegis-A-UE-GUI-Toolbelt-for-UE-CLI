@@ -1,3 +1,5 @@
+"""Panel for managing UAFT builds, device commands, and trace pulls."""
+
 from __future__ import annotations
 
 import subprocess

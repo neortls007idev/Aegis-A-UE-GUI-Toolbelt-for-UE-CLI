@@ -1,20 +1,22 @@
 repos:
-  - repo: local
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
     hooks:
       - id: black
-        name: black
-        entry: black
-        language: system
-        types: [python]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.11
+    hooks:
       - id: ruff
-        name: ruff
-        entry: ruff
         args: [check]
-        language: system
-        types: [python]
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1
+    hooks:
       - id: mypy
-        name: mypy
-        entry: mypy
-        language: system
         pass_filenames: false
-        args: [aegis/modules, aegis/core/ini_parser.py]
+        args:
+          - aegis/modules
+          - aegis/core
+          - aegis/ui/key_binding_actions.py
+          - aegis/ui/widgets/command_editor.py
+          - aegis/ui/widgets/env_doc.py
+          - aegis/ui/widgets/uaft_panel.py
