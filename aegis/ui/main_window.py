@@ -16,35 +16,28 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
-    QFileDialog,
     QProgressBar,
     QPushButton,
     QStatusBar,
-    QTabWidget,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
 )
 
 from aegis.core.settings import settings
 from aegis.core.preferences import preferences
 from aegis.core.task_runner import TaskRunner
+from aegis.ui.init_tabs import init_tabs
 from aegis.ui.key_binding_actions import KeyBindingActions
+from aegis.ui.log_color_actions import LogColorActions
 from aegis.ui.profile_actions import ProfileActions
 from aegis.ui.theme_actions import ThemeActions
-from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
-from aegis.ui.widgets.command_editor import CommandEditor
-from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.feedback_dialog import FeedbackDialog
 from aegis.ui.widgets.help_dialog import HelpDialog
-from aegis.ui.widgets.log_colors_editor import LogColorsEditor
 from aegis.ui.widgets.log_panel import LogPanel
-from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
-from aegis.ui.widgets.uaft_panel import UaftPanel
 from aegis.ui.menu_builder import build_menu
 
 
-class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
+class MainWindow(
+    QMainWindow, KeyBindingActions, ProfileActions, ThemeActions, LogColorActions
+):
     def __init__(self) -> None:
         super().__init__()
         self.prefs = preferences
@@ -61,47 +54,19 @@ class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
 
         self._batch_active = False
 
-        # Center tabs
-        self.tabs = QTabWidget()
-        self.env_doc = EnvDocPanel(self.runner, self._log)
-        env_container = QWidget()
-        env_layout = QVBoxLayout(env_container)
-        env_layout.addWidget(self.env_doc, 1)
+        tabs = init_tabs(self.runner, self._log)
+        self.tabs = tabs.tabs
+        self.env_doc = tabs.env_doc
+        self.batch_panel = tabs.batch_panel
+        self.command_editor = tabs.command_editor
+        self.build_tabs = tabs.build_tabs
+        self.uaft_panel = tabs.uaft_panel
+        self.info_bar = tabs.info_bar
+        self.setCentralWidget(tabs.central)
 
-        self.batch_panel = BatchBuilderPanel(self.runner, self._log)
         self.batch_panel.batch_started.connect(self._batch_started)
         self.batch_panel.batch_progress.connect(self._batch_progress)
         self.batch_panel.batch_finished.connect(self._batch_finished)
-
-        self.command_editor = CommandEditor(self.batch_panel)
-
-        build_tabs = QTabWidget()
-        build_tabs.addTab(self.batch_panel, "Tasks")
-        build_tabs.addTab(self.command_editor, "Edit Batch Commands")
-        build_container = QWidget()
-        build_layout = QVBoxLayout(build_container)
-        build_layout.addWidget(build_tabs, 1)
-        self.build_tabs = build_tabs
-
-        self.uaft_panel = UaftPanel(self.runner, self._log)
-        uaft_container = QWidget()
-        uaft_layout = QVBoxLayout(uaft_container)
-        uaft_layout.addWidget(self.uaft_panel, 1)
-
-        self.tabs.addTab(env_container, "EnvDoc")
-        self.tabs.addTab(build_container, "Build")
-        self.tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
-        self.tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
-        self.tabs.addTab(uaft_container, "Devices / UAFT")
-        self.tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
-        self.tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
-
-        central = QWidget()
-        central_layout = QVBoxLayout(central)
-        self.info_bar = ProfileInfoBar()
-        central_layout.addWidget(self.info_bar)
-        central_layout.addWidget(self.tabs)
-        self.setCentralWidget(central)
 
         # Status bar with progress and cancel button
         self.status = QStatusBar()
@@ -133,60 +98,6 @@ class MainWindow(QMainWindow, KeyBindingActions, ProfileActions, ThemeActions):
         """Ensure log panel width tracks window size."""
         super().resizeEvent(event)
         self.log_panel.reset_size()
-
-    # ----- Log colors -----
-    def _edit_log_colors(self) -> None:
-        cfg = self.log_panel.log_colors.all()
-        orig_levels = cfg["levels"]
-        orig_regex = self.log_panel.log_colors.regex_rules()
-        dlg = LogColorsEditor(
-            orig_levels,
-            orig_regex,
-            self,
-            on_preview=self.log_panel.log_message,
-        )
-        if dlg.exec():
-            levels, regex = dlg.get_config()
-            for lvl, col in levels.items():
-                self.log_panel.log_colors.set_level_color(lvl, col)
-            self.log_panel.log_colors.set_regex_rules(regex)
-        else:
-            for lvl, col in orig_levels.items():
-                self.log_panel.log_colors.set_level_color(lvl, col)
-            self.log_panel.log_colors.set_regex_rules(orig_regex)
-        self.log_panel.refresh_view()
-
-    def _import_log_colors(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import Log Colors", "", "JSON (*.json)"
-        )
-        if path:
-            try:
-                self.log_panel.log_colors.import_json(path)
-                self.log_panel.refresh_view()
-            except Exception as e:
-                QMessageBox.critical(self, "Import Error", str(e))
-
-    def _export_log_colors(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export Log Colors", "", "JSON (*.json)"
-        )
-        if path:
-            try:
-                self.log_panel.log_colors.export_json(path)
-            except Exception as e:
-                QMessageBox.critical(self, "Export Error", str(e))
-
-    def _reset_log_colors(self) -> None:
-        self.log_panel.log_colors.reset()
-        self.log_panel.refresh_view()
-
-    def _load_log_colors_file(self, path: Path) -> None:
-        try:
-            self.log_panel.log_colors.import_json(str(path))
-            self.log_panel.refresh_view()
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", str(e))
 
     # ----- Actions -----
     def _new_window(self) -> None:
