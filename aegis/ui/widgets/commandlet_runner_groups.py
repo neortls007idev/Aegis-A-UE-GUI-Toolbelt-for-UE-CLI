@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -20,33 +21,26 @@ from PySide6.QtWidgets import (
 @dataclass
 class PathsGroup:
     box: QGroupBox
-    exe_le: QLineEdit
-    proj_le: QLineEdit
+    exe_lbl: QLabel
+    rebuild_btn: QPushButton
 
 
-def create_paths_group(browse_cb: Callable[[QLineEdit, bool], None]) -> PathsGroup:
-    exe_le = QLineEdit()
-    exe_le.setObjectName("exe_le")
-    proj_le = QLineEdit()
-    proj_le.setObjectName("uproject_le")
-    btn_exe = QPushButton("Browse…")
-    btn_exe.clicked.connect(lambda: browse_cb(exe_le, False))
-    btn_proj = QPushButton("Browse…")
-    btn_proj.clicked.connect(lambda: browse_cb(proj_le, True))
-    grid = QGridLayout()
-    grid.setContentsMargins(2, 2, 2, 2)
-    grid.setHorizontalSpacing(2)
-    grid.setVerticalSpacing(2)
-    grid.addWidget(QLabel("UnrealEditor-Cmd.exe:"), 0, 0)
-    grid.addWidget(exe_le, 0, 1)
-    grid.addWidget(btn_exe, 0, 2)
-    grid.addWidget(QLabel("Project:"), 0, 3)
-    grid.addWidget(proj_le, 0, 4)
-    grid.addWidget(btn_proj, 0, 5)
+def create_paths_group() -> PathsGroup:
+    exe_lbl = QLabel("(no profile)")
+    exe_lbl.setObjectName("editor_cmd_lbl")
+    exe_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    rebuild_btn = QPushButton("Rebuild & Fix")
+    rebuild_btn.setObjectName("rebuild_editor_btn")
+    row = QHBoxLayout()
+    row.setContentsMargins(2, 2, 2, 2)
+    row.setSpacing(2)
+    row.addWidget(QLabel("UnrealEditor-Cmd.exe:"))
+    row.addWidget(exe_lbl, 1)
+    row.addWidget(rebuild_btn)
     box = QGroupBox("Paths & Target")
     box.setObjectName("paths_target_box")
-    box.setLayout(grid)
-    return PathsGroup(box, exe_le, proj_le)
+    box.setLayout(row)
+    return PathsGroup(box, exe_lbl, rebuild_btn)
 
 
 @dataclass
@@ -167,7 +161,6 @@ def create_run_controls(
     stop_cb: Callable[[], None],
 ) -> RunControls:
     preview_le = QLineEdit()
-    preview_le.setReadOnly(True)
     preview_le.setObjectName("preview_le")
     btn_copy = QPushButton("Copy")
     btn_copy.clicked.connect(copy_cb)
