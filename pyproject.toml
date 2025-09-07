@@ -12,19 +12,5 @@ addopts = "-ra"
 
 [tool.mypy]
 python_version = "3.11"
-files = [
-    "aegis/modules",
-    "aegis/core",
-    "aegis/ui/key_binding_actions.py",
-    "aegis/ui/widgets/command_editor.py",
-    "aegis/ui/widgets/env_doc.py",
-    "aegis/ui/widgets/uaft_panel.py",
-]
+files = ["aegis"]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = [
-    "aegis.ui.widgets.task_queue_widget",
-    "aegis.ui.widgets.batch_builder_panel",
-]
-ignore_errors = true

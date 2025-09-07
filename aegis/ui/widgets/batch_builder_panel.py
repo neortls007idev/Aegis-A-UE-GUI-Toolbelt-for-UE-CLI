@@ -191,11 +191,17 @@ class BatchBuilderPanel(QWidget):
             cfgs = profile.build_configs or DEFAULT_CONFIGS
             plats = profile.build_platforms or DEFAULT_PLATFORMS
             try:
-                self.ubt_label.setText(f"UBT: {self.ubt.exe()}")
+                if self.ubt:
+                    self.ubt_label.setText(f"UBT: {self.ubt.exe()}")
+                else:
+                    raise RuntimeError("UBT not found")
             except Exception:
                 self.ubt_label.setText("UBT: (not found)")
             try:
-                self.uat_label.setText(f"UAT: {self.uat.exe()}")
+                if self.uat:
+                    self.uat_label.setText(f"UAT: {self.uat.exe()}")
+                else:
+                    raise RuntimeError("UAT not found")
             except Exception:
                 self.uat_label.setText("UAT: (not found)")
         for c in cfgs:

@@ -69,7 +69,7 @@ class TaskQueueWidget(QWidget):
 
     def add_task(self, task: QueuedTask) -> None:
         """Append a task to the queue and update its preview tooltip."""
-        preview = self.argv_cb(task, preview=True)
+        preview = self.argv_cb(task, True)
         task.item.setSizeHint(task.widget.sizeHint())
         task.item.setToolTip(" ".join(shlex.quote(a) for a in preview))
         self.tasks.append(task)
@@ -114,7 +114,7 @@ class TaskQueueWidget(QWidget):
             return ""
         task = self.tasks[row]
         try:
-            argv = self.argv_cb(task, preview=True)
+            argv = self.argv_cb(task, True)
         except Exception:
             return ""
         cmd = " ".join(shlex.quote(a) for a in argv)
@@ -131,7 +131,7 @@ class TaskQueueWidget(QWidget):
             task.item.setToolTip(task.cmd_override)
         else:
             try:
-                argv = self.argv_cb(task, preview=True)
+                argv = self.argv_cb(task, True)
                 task.item.setToolTip(" ".join(shlex.quote(a) for a in argv))
             except Exception:
                 task.item.setToolTip("")

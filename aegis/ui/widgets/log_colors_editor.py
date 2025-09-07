@@ -79,11 +79,15 @@ class LogColorsEditor(QDialog):
         form = QFormLayout()
         self.level_buttons: Dict[str, ColorButton] = {}
         for level in ["info", "warning", "error", "success"]:
+            callback: Callable[[str], None] | None = None
+            if on_preview:
+
+                def callback(color: str, lvl=level) -> None:
+                    on_preview(lvl, color)
+
             btn = ColorButton(
                 levels.get(level, DEFAULT_LEVEL_COLORS[level]),
-                on_preview=(
-                    (lambda c, lvl=level: on_preview(lvl, c)) if on_preview else None
-                ),
+                on_preview=callback,
             )
             form.addRow(level.capitalize(), btn)
             self.level_buttons[level] = btn
