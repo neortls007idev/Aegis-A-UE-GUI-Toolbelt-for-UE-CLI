@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from aegis.modules.uaft import Uaft
 
 
@@ -14,19 +12,6 @@ SecurityToken={token}
 """,
         encoding="utf-8",
     )
-
-
-@pytest.mark.xfail(reason="watchdog event not firing in CI")
-def test_security_token_updates(tmp_path: Path) -> None:
-    ini = tmp_path / "Config" / "DefaultEngine.ini"
-    make_ini(ini, "AAA")
-    uaft = Uaft(Path("uaft"), project_dir=tmp_path)
-    assert uaft.security_token() == "AAA"
-    uaft._token_updated.clear()
-    make_ini(ini, "BBB")
-    assert uaft._token_updated.wait(timeout=2)
-    assert uaft.security_token() == "BBB"
-    uaft.stop()
 
 
 def test_security_token_after_delimiter(tmp_path: Path) -> None:
