@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import sys
 from typing import Callable
 
 from PySide6.QtCore import Qt
@@ -61,6 +60,7 @@ class TraceOpsPage(QWidget):
         self.launch_insights_btn = QPushButton("Launch Unreal Insights")
         self.launch_insights_btn.setObjectName("launch_insights_btn")
         self.launch_insights_btn.setEnabled(False)
+        self.insights_bin: Path | None = None
         self.store_edit = QLineEdit()
         self.store_edit.setPlaceholderText("Trace store")
         self.store_edit.setObjectName("store_edit")
@@ -174,17 +174,12 @@ class TraceOpsPage(QWidget):
             self.store_edit.clear()
             self.launch_insights_btn.setEnabled(False)
             return
-        plat = (
-            "Win64"
-            if sys.platform == "win32"
-            else "Linux" if sys.platform == "linux" else "Mac"
-        )
-        bin_path = profile.engine_root / "Engine" / "Binaries" / plat
+        bin_path = profile.engine_root / "Engine" / "Binaries"
         self.engine_label.setText(str(bin_path))
-        self.insights_bin = bin_path / (
-            "UnrealInsights.exe" if sys.platform == "win32" else "UnrealInsights"
+        self.insights_bin = self.controller.find_insights_bin(bin_path)
+        self.launch_insights_btn.setEnabled(
+            self.insights_bin is not None and self.insights_bin.exists()
         )
-        self.launch_insights_btn.setEnabled(self.insights_bin.exists())
         self._store_overridden = False
         self._update_store()
 
@@ -197,7 +192,7 @@ class TraceOpsPage(QWidget):
         self.log(f"Rebuilding Unreal Insights: {' '.join(argv)}", "info")
 
     def _launch_insights(self) -> None:
-        if not getattr(self, "insights_bin", None) or not self.insights_bin.exists():
+        if not self.insights_bin or not self.insights_bin.exists():
             self.log("[insights] Unreal Insights not found", "error")
             return
         argv = self.controller.launch_insights(self.insights_bin)

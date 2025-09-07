@@ -11,9 +11,12 @@ def test_build_trace_flags() -> None:
     assert "-statnamedevents" in flags
 
 
-def test_server_argv() -> None:
+def test_server_argv(tmp_path: Path) -> None:
     ctrl = TraceOpsController()
-    bin_dir = Path("/Engine/Binaries/Win64")
-    argv = ctrl.server_argv(bin_dir, Path("/store"))
+    bin_root = tmp_path / "Engine" / "Binaries"
+    plat_dir = bin_root / "Win64"
+    plat_dir.mkdir(parents=True)
+    (plat_dir / "UnrealTraceServer.exe").write_text("x")
+    argv = ctrl.server_argv(bin_root, Path("/store"))
     assert argv[0].endswith("UnrealTraceServer.exe")
     assert "--store" in argv

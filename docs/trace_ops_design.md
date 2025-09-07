@@ -12,9 +12,10 @@ flags, lists collected traces, and launches Unreal Insights for analysis.
 
 ## Server Lifecycle
 
-`TraceOpsController` starts `UnrealTraceServer.exe` from the selected Engine
-binaries folder.  The process runs in the background and can be stopped from the
-UI.  The default port is `1981` and an optional store directory may be
+`TraceOpsController` starts `UnrealTraceServer.exe` from the Engine binaries
+directory. It automatically searches platform subdirectories to locate the
+correct executable. The process runs in the background and can be stopped from
+the UI. The default port is `1981` and an optional store directory may be
 specified.
 
 ## Client Helpers
