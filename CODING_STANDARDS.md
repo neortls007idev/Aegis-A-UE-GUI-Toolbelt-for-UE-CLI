@@ -1,5 +1,7 @@
 # Coding Standards
 
+## Python
+
 - **Python version**: 3.11 or newer.
 - **Type hints**: required for all functions and methods.
 - **Formatting**: `black` for code style, `ruff` for linting.
@@ -14,15 +16,11 @@
 - **Automation**: run `ruff check .`, `black --check .`, `mypy`, and `PYTHONPATH=$PWD pytest` before pushing. CI verifies these checks on `main`, `dev`, `feat/**`, and `maintenance/**` branches.
 - **Dependencies and tooling**: keep requirements, pre-commit hooks, and GitHub Actions workflows in sync when introducing new tools.
 
-## C++ Guidelines
+## C++
 
+- **Naming**: methods and free functions use PascalCase. Variables use camelCase; data members are prefixed with `m`. File names use PascalCase.
+- **Braces**: opening braces appear on their own line (Allman style).
+- **Conditionals**: format as `if ( condition )` with braces on subsequent lines.
 - Initialize pointers to `nullptr` and verify before use.
 - Format conditionals as:
-
-  ```cpp
-  if ( condition )
-  {
-      // ...
-  }
-  ```
 - Use `printf` for logging and `scanf` with fixed-size character buffers for input parsing.
