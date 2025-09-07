@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from aegis.core.profile import Profile
 from aegis.modules.trace_ops import TraceOpsController
 from aegis.ui.widgets.command_preview import CommandPreviewWidget
 
@@ -46,16 +49,24 @@ class TraceOpsPage(QWidget):
         self.setObjectName("trace_ops_page")
 
         # Server widgets
-        self.engine_edit = QLineEdit()
-        self.engine_edit.setPlaceholderText("Engine/Binaries path")
-        self.engine_edit.setObjectName("engine_edit")
-        self.browse_engine_btn = QPushButton("Browse…")
-        self.browse_engine_btn.setObjectName("browse_engine_btn")
+        self.profile: Profile | None = None
+        self.engine_label = QLabel("(no profile)")
+        self.engine_label.setObjectName("engine_label")
+        self.engine_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.trace_name_edit = QLineEdit()
+        self.trace_name_edit.setPlaceholderText("Trace name")
+        self.trace_name_edit.setObjectName("trace_name_edit")
+        self.rebuild_insights_btn = QPushButton("Rebuild & Fix Unreal Insights")
+        self.rebuild_insights_btn.setObjectName("rebuild_insights_btn")
+        self.launch_insights_btn = QPushButton("Launch Unreal Insights")
+        self.launch_insights_btn.setObjectName("launch_insights_btn")
+        self.launch_insights_btn.setEnabled(False)
         self.store_edit = QLineEdit()
-        self.store_edit.setPlaceholderText("Trace store (optional)")
+        self.store_edit.setPlaceholderText("Trace store")
         self.store_edit.setObjectName("store_edit")
         self.browse_store_btn = QPushButton("Browse…")
         self.browse_store_btn.setObjectName("browse_store_btn")
+        self._store_overridden = False
         self.start_btn = QPushButton("Start Server")
         self.start_btn.setObjectName("start_btn")
         self.stop_btn = QPushButton("Stop Server")
@@ -79,18 +90,23 @@ class TraceOpsPage(QWidget):
         ls = QVBoxLayout()
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Engine bin:"))
-        row1.addWidget(self.engine_edit, 1)
-        row1.addWidget(self.browse_engine_btn)
+        row1.addWidget(self.engine_label, 1)
         ls.addLayout(row1)
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Store:"))
-        row2.addWidget(self.store_edit, 1)
-        row2.addWidget(self.browse_store_btn)
+        row2.addWidget(QLabel("Trace name:"))
+        row2.addWidget(self.trace_name_edit, 1)
+        row2.addWidget(self.rebuild_insights_btn)
+        row2.addWidget(self.launch_insights_btn)
         ls.addLayout(row2)
         row3 = QHBoxLayout()
-        row3.addWidget(self.start_btn)
-        row3.addWidget(self.stop_btn)
+        row3.addWidget(QLabel("Store:"))
+        row3.addWidget(self.store_edit, 1)
+        row3.addWidget(self.browse_store_btn)
         ls.addLayout(row3)
+        row4 = QHBoxLayout()
+        row4.addWidget(self.start_btn)
+        row4.addWidget(self.stop_btn)
+        ls.addLayout(row4)
         server_box.setLayout(ls)
         root.addWidget(server_box)
 
@@ -112,28 +128,26 @@ class TraceOpsPage(QWidget):
 
     # ----- Signals -----
     def _connect(self) -> None:
-        self.browse_engine_btn.clicked.connect(self._choose_engine)
+        self.trace_name_edit.textChanged.connect(lambda _: self._update_store())
+        self.store_edit.textEdited.connect(self._mark_store_overridden)
         self.browse_store_btn.clicked.connect(self._choose_store)
         self.start_btn.clicked.connect(self._start_server)
         self.stop_btn.clicked.connect(self._stop_server)
+        self.rebuild_insights_btn.clicked.connect(self._rebuild_insights)
+        self.launch_insights_btn.clicked.connect(self._launch_insights)
         self.host_edit.textChanged.connect(lambda _: self._update_flags())
         for chk in self.channel_checks.values():
             chk.stateChanged.connect(lambda _state: self._update_flags())
 
     # ----- Helpers -----
-    def _choose_engine(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Choose Engine Bin")
-        if path:
-            self.engine_edit.setText(path)
-            self._update_flags()
-
     def _choose_store(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Choose Trace Store")
         if path:
             self.store_edit.setText(path)
+            self._store_overridden = True
 
     def _start_server(self) -> None:
-        engine = Path(self.engine_edit.text())
+        engine = Path(self.engine_label.text())
         store = Path(self.store_edit.text()) if self.store_edit.text() else None
         argv = self.controller.start_server(engine, store)
         self.flags_preview.set_command(" ".join(argv))
@@ -151,3 +165,50 @@ class TraceOpsPage(QWidget):
         extras = {"statnamedevents": "", "cpuprofilertrace": ""}
         cmd = self.controller.build_trace_flags(preset, host, extras)
         self.flags_preview.set_command(cmd)
+
+    # ----- Profile -----
+    def update_profile(self, profile: Profile | None) -> None:
+        self.profile = profile
+        if not profile:
+            self.engine_label.setText("(no profile)")
+            self.store_edit.clear()
+            self.launch_insights_btn.setEnabled(False)
+            return
+        plat = (
+            "Win64"
+            if sys.platform == "win32"
+            else "Linux" if sys.platform == "linux" else "Mac"
+        )
+        bin_path = profile.engine_root / "Engine" / "Binaries" / plat
+        self.engine_label.setText(str(bin_path))
+        self.insights_bin = bin_path / (
+            "UnrealInsights.exe" if sys.platform == "win32" else "UnrealInsights"
+        )
+        self.launch_insights_btn.setEnabled(self.insights_bin.exists())
+        self._store_overridden = False
+        self._update_store()
+
+    # ----- Insights helpers -----
+    def _rebuild_insights(self) -> None:
+        if not self.profile:
+            self.log("[insights] No profile selected", "error")
+            return
+        argv = self.controller.rebuild_insights(self.profile.engine_root)
+        self.log(f"Rebuilding Unreal Insights: {' '.join(argv)}", "info")
+
+    def _launch_insights(self) -> None:
+        if not getattr(self, "insights_bin", None) or not self.insights_bin.exists():
+            self.log("[insights] Unreal Insights not found", "error")
+            return
+        argv = self.controller.launch_insights(self.insights_bin)
+        self.log(f"Launched Unreal Insights: {' '.join(argv)}", "info")
+
+    def _update_store(self) -> None:
+        if self._store_overridden or not self.profile:
+            return
+        name = self.trace_name_edit.text().strip() or "trace"
+        dir_path = self.profile.project_dir / "Unreal Insights" / name
+        self.store_edit.setText(str(dir_path))
+
+    def _mark_store_overridden(self) -> None:
+        self._store_overridden = True

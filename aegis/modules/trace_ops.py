@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 from typing import Iterable
+import sys
 
 
 @dataclass
@@ -83,6 +84,18 @@ class TraceOpsController:
     # ----- Insights -----
     def open_in_insights(self, insights_bin: Path, trace: Path) -> list[str]:
         argv = [str(insights_bin), f"-OpenTraceFile={trace}"]
+        subprocess.Popen(argv, text=True)
+        return argv
+
+    def launch_insights(self, insights_bin: Path) -> list[str]:
+        argv = [str(insights_bin)]
+        subprocess.Popen(argv, text=True)
+        return argv
+
+    def rebuild_insights(self, engine_root: Path) -> list[str]:
+        script_name = "RunUAT.bat" if sys.platform == "win32" else "RunUAT.sh"
+        script = engine_root / "Engine" / "Build" / "BatchFiles" / script_name
+        argv = [str(script), "BuildUnrealInsights"]
         subprocess.Popen(argv, text=True)
         return argv
 
