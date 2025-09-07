@@ -14,6 +14,7 @@ from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 from aegis.ui.widgets.uaft_panel import UaftPanel
 from aegis.ui.widgets.pak_iostore_panel import PakIoStorePanel
+from aegis.ui.widgets.commandlet_runner_widget import CommandletRunnerWidget
 
 
 @dataclass
@@ -27,6 +28,7 @@ class TabSetup:
     build_tabs: QTabWidget
     uaft_panel: UaftPanel
     pak_panel: PakIoStorePanel
+    commandlet_runner: CommandletRunnerWidget
 
 
 def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetup:
@@ -54,10 +56,11 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
     uaft_layout.addWidget(uaft_panel, 1)
 
     pak_panel = PakIoStorePanel()
+    cmd_panel = CommandletRunnerWidget(runner, log_cb)
 
     tabs.addTab(env_container, "EnvDoc")
     tabs.addTab(build_container, "Build")
-    tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
+    tabs.addTab(cmd_panel, "Commandlets")
     tabs.addTab(pak_panel, "Pak / IoStore")
     tabs.addTab(uaft_container, "Devices / UAFT")
     tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
@@ -79,4 +82,5 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
         build_tabs=build_tabs,
         uaft_panel=uaft_panel,
         pak_panel=pak_panel,
+        commandlet_runner=cmd_panel,
     )

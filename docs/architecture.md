@@ -11,7 +11,7 @@ stay decoupled and easy to extend.
   subprocess task runner
 - `aegis/modules/` – wrappers for individual Unreal command‑line tools
 - `aegis/ui/` – Qt widgets, pages, and themes
-- `docs/` – developer documentation
+- `docs/` – developer documentation (see `commandlet_runner.md` for the Commandlet Runner design)
 - `tests/` – unit and functional tests
 
 ## Core
