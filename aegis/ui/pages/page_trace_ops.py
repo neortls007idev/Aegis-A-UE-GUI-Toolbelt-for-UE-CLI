@@ -174,7 +174,9 @@ class TraceOpsPage(QWidget):
             self.store_edit.clear()
             self.launch_insights_btn.setEnabled(False)
             return
-        bin_path = profile.engine_root / "Engine" / "Binaries"
+        bin_path = self.controller.engine_bin_path(profile.engine_root)
+        # TraceOpsController searches ``bin_path`` for UnrealTraceServer and
+        # UnrealInsights executables.
         self.engine_label.setText(str(bin_path))
         self.insights_bin = self.controller.find_insights_bin(bin_path)
         self.launch_insights_btn.setEnabled(
