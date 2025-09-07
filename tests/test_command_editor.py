@@ -3,6 +3,7 @@
 import pytest
 
 pytest.importorskip("PySide6")
+from pytestqt.qtbot import QtBot
 
 from PySide6.QtCore import QObject, Signal
 
@@ -33,7 +34,7 @@ class DummyBatch(QObject):
         return self.cmds[row]
 
 
-def test_refresh_populates_rows(qtbot) -> None:
+def test_refresh_populates_rows(qtbot: QtBot) -> None:
     batch = DummyBatch()
     editor = CommandEditor(batch)  # type: ignore[arg-type]
     qtbot.addWidget(editor)
