@@ -16,3 +16,4 @@ def test_init_tabs_creates_tabs(qtbot) -> None:
     setup = init_tabs(TaskRunner(), _noop_log)
     qtbot.addWidget(setup.central)
     assert setup.tabs.count() == 7
+    assert setup.commandlet_runner is not None

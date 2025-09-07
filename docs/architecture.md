@@ -11,7 +11,7 @@ stay decoupled and easy to extend.
   subprocess task runner
 - `aegis/modules/` – wrappers for individual Unreal command‑line tools
 - `aegis/ui/` – Qt widgets, pages, and themes
-- `docs/` – developer documentation
+- `docs/` – developer documentation (see `commandlet_runner.md` for the Commandlet Runner design)
 - `tests/` – unit and functional tests
 
 ## Core
@@ -30,7 +30,8 @@ and widgets.
 ## Modules
 
 `aegis/modules` contains thin adapters around command‑line tools such as
-`uaft.py`, `uat.py`, and `ubt.py`.
+`uaft.py`, `uat.py`, and `ubt.py`.  Trace utilities live in
+`trace_ops.py`.
 
 Responsibilities:
 
@@ -53,7 +54,7 @@ To add a new CLI integration:
 All Qt code lives under `aegis/ui`:
 
 - `main_window.py` configures the `QMainWindow` and dock widgets.
-- `pages/` groups high‑level views.
+- `pages/` groups high‑level views like the Trace Ops page.
 - `widgets/` holds dockable panels such as `log_panel.py`,
   `batch_builder_panel.py`, and `uaft_panel.py`.
 - `themes/` contains QSS files (`dark.qss`, `light.qss`, `high_contrast.qss`).
@@ -84,6 +85,15 @@ When introducing another command‑line tool:
    non‑blocking execution and streams logs to the Live Log.
 4. Persist any settings via `settings.py` or `profile.py` and follow existing
    theming and layout conventions.
+
+## Tests & Automation
+
+The Tests tab provides helpers for Gauntlet and BuildGraph workflows. The
+Gauntlet runner assembles `RunUAT Gauntlet` commands with CSV profiler and
+Unreal Insights capture, optional device selectors, and auto-detected engine
+paths. The BuildGraph runner executes XML presets for deterministic packaging
+flows such as Windows clients, Android AAB/OBB builds, and tools bundles.
+See `test_automation.md` for the full design.
 
 This separation ensures one‑click actions with accurate previews, guardrails,
 and self‑service logs while keeping the codebase straightforward to grow.

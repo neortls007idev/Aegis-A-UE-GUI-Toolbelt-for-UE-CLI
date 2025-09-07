@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from PySide6.QtWidgets import QTabWidget, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
 from aegis.core.task_runner import TaskRunner
 from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
@@ -13,6 +13,10 @@ from aegis.ui.widgets.command_editor import CommandEditor
 from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 from aegis.ui.widgets.uaft_panel import UaftPanel
+from aegis.ui.widgets.pak_iostore_panel import PakIoStorePanel
+from aegis.ui.widgets.commandlet_runner_widget import CommandletRunnerWidget
+from aegis.ui.widgets.gauntlet_panel import GauntletPanel
+from aegis.ui.widgets.buildgraph_panel import BuildGraphPanel
 
 
 @dataclass
@@ -25,6 +29,10 @@ class TabSetup:
     command_editor: CommandEditor
     build_tabs: QTabWidget
     uaft_panel: UaftPanel
+    pak_panel: PakIoStorePanel
+    commandlet_runner: CommandletRunnerWidget
+    gauntlet_panel: GauntletPanel
+    buildgraph_panel: BuildGraphPanel
 
 
 def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetup:
@@ -51,13 +59,21 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
     uaft_layout = QVBoxLayout(uaft_container)
     uaft_layout.addWidget(uaft_panel, 1)
 
+    pak_panel = PakIoStorePanel(runner)
+    cmd_panel = CommandletRunnerWidget(runner, log_cb)
+
+    tests_tabs = QTabWidget()
+    gauntlet_panel = GauntletPanel(runner, log_cb)
+    buildgraph_panel = BuildGraphPanel(runner, log_cb)
+    tests_tabs.addTab(gauntlet_panel, "Gauntlet")
+    tests_tabs.addTab(buildgraph_panel, "BuildGraph")
+
     tabs.addTab(env_container, "EnvDoc")
     tabs.addTab(build_container, "Build")
-    tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
-    tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
+    tabs.addTab(cmd_panel, "Commandlets")
+    tabs.addTab(pak_panel, "Pak / IoStore")
     tabs.addTab(uaft_container, "Devices / UAFT")
-    tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
-    tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
+    tabs.addTab(tests_tabs, "Tests")
 
     info_bar = ProfileInfoBar()
     central = QWidget()
@@ -74,4 +90,8 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
         command_editor=command_editor,
         build_tabs=build_tabs,
         uaft_panel=uaft_panel,
+        pak_panel=pak_panel,
+        commandlet_runner=cmd_panel,
+        gauntlet_panel=gauntlet_panel,
+        buildgraph_panel=buildgraph_panel,
     )

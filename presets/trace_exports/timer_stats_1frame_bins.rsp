@@ -1,0 +1,1 @@
+TimingInsights.ExportTimerStatistics ./CSV/TimerStats.csv -regions="*"

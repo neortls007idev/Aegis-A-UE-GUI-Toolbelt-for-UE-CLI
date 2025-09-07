@@ -1,0 +1,15 @@
+<BuildGraph>
+  <Define Name="ArchiveDir"/>
+  <Node Name="BuildUnrealPak">
+    <Run Command="echo build pak" />
+  </Node>
+  <Node Name="BuildIoStoreUtilities" Requires="BuildUnrealPak">
+    <Run Command="echo build iostore" />
+  </Node>
+  <Node Name="BuildInsights" Requires="BuildIoStoreUtilities">
+    <Run Command="echo build insights" />
+  </Node>
+  <Node Name="ArchiveTools" Requires="BuildInsights">
+    <Run Command="echo archive to $(ArchiveDir)" />
+  </Node>
+</BuildGraph>
