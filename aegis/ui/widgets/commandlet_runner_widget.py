@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Callable
+import shlex
+import sys
 
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QInputDialog,
-    QLineEdit,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QFileDialog, QInputDialog, QVBoxLayout, QWidget
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
@@ -28,6 +24,7 @@ from aegis.modules.commandlets import (
     save_commandlets,
     save_recipe,
 )
+from aegis.modules.ubt import Ubt
 from . import commandlet_runner_groups as crg
 
 
@@ -42,12 +39,20 @@ class CommandletRunnerWidget(QWidget):
         self.runner = runner
         self.log = log_cb
         self.profile: Profile | None = None
+        self.exe_path: Path | None = None
+        self.uproject: Path | None = None
 
-        self.paths: crg.PathsGroup = crg.create_paths_group(self._browse)
+        self.paths: crg.PathsGroup = crg.create_paths_group()
+        self.paths.rebuild_btn.clicked.connect(self._rebuild_editor)
         self.scope: crg.ScopeGroup = crg.create_scope_group(load_commandlets(None))
         self.scope.add_btn.clicked.connect(self._add_cmdlet)
         self.scope.edit_btn.clicked.connect(self._edit_cmdlet)
         self.scope.remove_btn.clicked.connect(self._remove_cmdlet)
+        self.scope.project_browse_btn.clicked.connect(self._browse_project)
+        self.scope.packages_browse_btn.clicked.connect(self._browse_packages)
+        self.scope.maps_browse_btn.clicked.connect(self._browse_maps)
+        self.scope.collection_browse_btn.clicked.connect(self._browse_collection)
+        self.scope.project_le.textChanged.connect(self._project_changed)
         self.flags: crg.FlagsGroup = crg.create_flags_group()
         self.controls: crg.RunControls = crg.create_run_controls(
             lambda: QGuiApplication.clipboard().setText(
@@ -62,12 +67,15 @@ class CommandletRunnerWidget(QWidget):
         )
 
         self.inputs = [
-            self.paths.exe_le,
-            self.paths.proj_le,
             self.scope.cmdlet_cb,
+            self.scope.project_le,
+            self.scope.project_browse_btn,
             self.scope.packages_le,
+            self.scope.packages_browse_btn,
             self.scope.maps_le,
+            self.scope.maps_browse_btn,
             self.scope.collection_le,
+            self.scope.collection_browse_btn,
             self.scope.add_btn,
             self.scope.edit_btn,
             self.scope.remove_btn,
@@ -79,6 +87,7 @@ class CommandletRunnerWidget(QWidget):
             self.flags.extra_le,
             self.recipes.save_btn,
             self.recipes.load_btn,
+            self.controls.preview_le,
             self.controls.dry_run_btn,
             self.controls.run_btn,
         ]
@@ -94,28 +103,13 @@ class CommandletRunnerWidget(QWidget):
             root.addWidget(box)
 
     def _load_cmdlets(self) -> None:
-        proj = self.paths.proj_le.text()
-        cmdlets = load_commandlets(Path(proj)) if proj else load_commandlets(None)
+        proj = self.uproject
+        cmdlets = load_commandlets(proj) if proj else load_commandlets(None)
         current = self.scope.cmdlet_cb.currentText()
         self.scope.cmdlet_cb.clear()
         self.scope.cmdlet_cb.addItems(cmdlets)
         if current in cmdlets:
             self.scope.cmdlet_cb.setCurrentText(current)
-
-    def _browse(self, le: QLineEdit, uproject: bool = False) -> None:
-        if uproject:
-            path, _ = QFileDialog.getOpenFileName(
-                self, "Choose .uproject", str(Path.cwd()), "*.uproject"
-            )
-        else:
-            path, _ = QFileDialog.getOpenFileName(
-                self, "Choose UnrealEditor-Cmd.exe", str(Path.cwd())
-            )
-        if path:
-            le.setText(path)
-            if uproject:
-                self._load_cmdlets()
-            self._dry_run()
 
     def _add_cmdlet(self) -> None:
         name, ok = QInputDialog.getText(self, "Add Commandlet", "Commandlet name:")
@@ -123,13 +117,13 @@ class CommandletRunnerWidget(QWidget):
             if self.scope.cmdlet_cb.findText(name) == -1:
                 self.scope.cmdlet_cb.addItem(name)
             self.scope.cmdlet_cb.setCurrentText(name)
-            proj = self.paths.proj_le.text()
+            proj = self.uproject
             if proj:
                 cmds = [
                     self.scope.cmdlet_cb.itemText(i)
                     for i in range(self.scope.cmdlet_cb.count())
                 ]
-                save_commandlets(Path(proj), cmds)
+                save_commandlets(proj, cmds)
             self._dry_run()
 
     def _edit_cmdlet(self) -> None:
@@ -142,13 +136,13 @@ class CommandletRunnerWidget(QWidget):
         if ok and name and name != current:
             idx = self.scope.cmdlet_cb.currentIndex()
             self.scope.cmdlet_cb.setItemText(idx, name)
-            proj = self.paths.proj_le.text()
+            proj = self.uproject
             if proj:
                 cmds = [
                     self.scope.cmdlet_cb.itemText(i)
                     for i in range(self.scope.cmdlet_cb.count())
                 ]
-                save_commandlets(Path(proj), cmds)
+                save_commandlets(proj, cmds)
             self._dry_run()
 
     def _remove_cmdlet(self) -> None:
@@ -157,13 +151,44 @@ class CommandletRunnerWidget(QWidget):
             return
         idx = self.scope.cmdlet_cb.currentIndex()
         self.scope.cmdlet_cb.removeItem(idx)
-        proj = self.paths.proj_le.text()
+        proj = self.uproject
         if proj:
             cmds = [
                 self.scope.cmdlet_cb.itemText(i)
                 for i in range(self.scope.cmdlet_cb.count())
             ]
-            save_commandlets(Path(proj), cmds)
+            save_commandlets(proj, cmds)
+        self._dry_run()
+
+    def _browse_project(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Project", "", "Unreal Project (*.uproject)"
+        )
+        if path:
+            self.scope.project_le.setText(path)
+
+    def _browse_packages(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Package Path")
+        if path:
+            current = self.scope.packages_le.text().strip()
+            sep = ";" if current else ""
+            self.scope.packages_le.setText(f"{current}{sep}{path}")
+
+    def _browse_maps(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Map", "", "Map Files (*.umap)")
+        if path:
+            current = self.scope.maps_le.text().strip()
+            sep = ";" if current else ""
+            self.scope.maps_le.setText(f"{current}{sep}{path}")
+
+    def _browse_collection(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Collection", "", "*")
+        if path:
+            self.scope.collection_le.setText(path)
+
+    def _project_changed(self, text: str) -> None:
+        self.uproject = Path(text) if text else None
+        self._load_cmdlets()
         self._dry_run()
 
     def _recipe(self) -> CommandletRecipe:
@@ -184,11 +209,9 @@ class CommandletRunnerWidget(QWidget):
         )
 
     def _build(self) -> list[str]:
-        argv = build_argv(
-            Path(self.paths.exe_le.text()),
-            Path(self.paths.proj_le.text()),
-            self._recipe(),
-        )
+        if not (self.exe_path and self.uproject):
+            return []
+        argv = build_argv(self.exe_path, self.uproject, self._recipe())
         self.controls.preview_le.setText(preview_command(argv))
         return argv
 
@@ -196,7 +219,10 @@ class CommandletRunnerWidget(QWidget):
         self._build()
 
     def _run(self) -> None:
-        argv = self._build()
+        text = self.controls.preview_le.text().strip()
+        argv = shlex.split(text) if text else self._build()
+        if not argv:
+            return
         self._toggle(True)
 
         def out(line: str) -> None:
@@ -217,13 +243,13 @@ class CommandletRunnerWidget(QWidget):
         self.controls.stop_btn.setEnabled(running)
 
     def _save_recipe(self) -> None:
-        if not self.paths.proj_le.text():
+        if not self.uproject:
             return
         name, ok = QInputDialog.getText(
             self, "Recipe Name", "Filename (without .json):"
         )
         if ok and name:
-            save_recipe(Path(self.paths.proj_le.text()), name, self._recipe())
+            save_recipe(self.uproject, name, self._recipe())
 
     def _apply_recipe(self, r: CommandletRecipe) -> None:
         if self.scope.cmdlet_cb.findText(r.commandlet) == -1:
@@ -246,12 +272,12 @@ class CommandletRunnerWidget(QWidget):
             cb.setChecked(state)
 
     def _load_recipe(self) -> None:
-        if not self.paths.proj_le.text():
+        if not self.uproject:
             return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Load Recipe",
-            str(recipes_dir(Path(self.paths.proj_le.text()))),
+            str(recipes_dir(self.uproject)),
             "*.json",
         )
         if path:
@@ -262,9 +288,41 @@ class CommandletRunnerWidget(QWidget):
         self.profile = profile
         if profile:
             exe = profile.engine_root / "Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
-            self.paths.exe_le.setText(str(exe))
+            self.exe_path = exe
+            self.paths.exe_lbl.setText(str(exe))
             for p in profile.project_dir.glob("*.uproject"):
-                self.paths.proj_le.setText(str(p))
+                self.uproject = p
                 break
+            self.scope.project_le.setText(str(self.uproject) if self.uproject else "")
             self._load_cmdlets()
             self._dry_run()
+        else:
+            self.paths.exe_lbl.setText("(no profile)")
+            self.exe_path = None
+            self.uproject = None
+            self.scope.project_le.setText("")
+
+    def _rebuild_editor(self) -> None:
+        if not self.profile:
+            self.log("[ubt] No profile selected", "error")
+            return
+        ubt = Ubt(self.profile.engine_root, self.profile.project_dir)
+        if sys.platform == "win32":
+            platform = "Win64"
+        elif sys.platform == "darwin":
+            platform = "Mac"
+        else:
+            platform = "Linux"
+        target, cfg = ubt.guess_target("DevelopmentEditor")
+        argv = ubt.build_argv(target, platform, cfg, clean=True)
+        self.log(f"[ubt] {' '.join(argv)}", "info")
+
+        def done(code: int) -> None:
+            self.log(f"[ubt] exit code {code}", "success" if code == 0 else "error")
+
+        self.runner.start(
+            argv,
+            on_stdout=lambda s: self.log(f"[ubt] {s}", "info"),
+            on_stderr=lambda s: self.log(f"[ubt] {s}", "error"),
+            on_exit=done,
+        )

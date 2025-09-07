@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -20,33 +21,26 @@ from PySide6.QtWidgets import (
 @dataclass
 class PathsGroup:
     box: QGroupBox
-    exe_le: QLineEdit
-    proj_le: QLineEdit
+    exe_lbl: QLabel
+    rebuild_btn: QPushButton
 
 
-def create_paths_group(browse_cb: Callable[[QLineEdit, bool], None]) -> PathsGroup:
-    exe_le = QLineEdit()
-    exe_le.setObjectName("exe_le")
-    proj_le = QLineEdit()
-    proj_le.setObjectName("uproject_le")
-    btn_exe = QPushButton("Browse…")
-    btn_exe.clicked.connect(lambda: browse_cb(exe_le, False))
-    btn_proj = QPushButton("Browse…")
-    btn_proj.clicked.connect(lambda: browse_cb(proj_le, True))
-    grid = QGridLayout()
-    grid.setContentsMargins(2, 2, 2, 2)
-    grid.setHorizontalSpacing(2)
-    grid.setVerticalSpacing(2)
-    grid.addWidget(QLabel("UnrealEditor-Cmd.exe:"), 0, 0)
-    grid.addWidget(exe_le, 0, 1)
-    grid.addWidget(btn_exe, 0, 2)
-    grid.addWidget(QLabel("Project:"), 0, 3)
-    grid.addWidget(proj_le, 0, 4)
-    grid.addWidget(btn_proj, 0, 5)
+def create_paths_group() -> PathsGroup:
+    exe_lbl = QLabel("(no profile)")
+    exe_lbl.setObjectName("editor_cmd_lbl")
+    exe_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    rebuild_btn = QPushButton("Rebuild & Fix")
+    rebuild_btn.setObjectName("rebuild_editor_btn")
+    row = QHBoxLayout()
+    row.setContentsMargins(2, 2, 2, 2)
+    row.setSpacing(2)
+    row.addWidget(QLabel("UnrealEditor-Cmd.exe:"))
+    row.addWidget(exe_lbl, 1)
+    row.addWidget(rebuild_btn)
     box = QGroupBox("Paths & Target")
     box.setObjectName("paths_target_box")
-    box.setLayout(grid)
-    return PathsGroup(box, exe_le, proj_le)
+    box.setLayout(row)
+    return PathsGroup(box, exe_lbl, rebuild_btn)
 
 
 @dataclass
@@ -56,9 +50,14 @@ class ScopeGroup:
     add_btn: QPushButton
     edit_btn: QPushButton
     remove_btn: QPushButton
+    project_le: QLineEdit
+    project_browse_btn: QPushButton
     packages_le: QLineEdit
+    packages_browse_btn: QPushButton
     maps_le: QLineEdit
+    maps_browse_btn: QPushButton
     collection_le: QLineEdit
+    collection_browse_btn: QPushButton
 
 
 def create_scope_group(commandlets: list[str]) -> ScopeGroup:
@@ -76,14 +75,32 @@ def create_scope_group(commandlets: list[str]) -> ScopeGroup:
     row_cmdlet.addWidget(add_btn)
     row_cmdlet.addWidget(edit_btn)
     row_cmdlet.addWidget(remove_btn)
+    project_le = QLineEdit()
+    project_browse = QPushButton("Browse")
+    row_project = QHBoxLayout()
+    row_project.addWidget(project_le, 1)
+    row_project.addWidget(project_browse)
     packages_le = QLineEdit()
+    packages_browse = QPushButton("Browse")
+    row_packages = QHBoxLayout()
+    row_packages.addWidget(packages_le, 1)
+    row_packages.addWidget(packages_browse)
     maps_le = QLineEdit()
+    maps_browse = QPushButton("Browse")
+    row_maps = QHBoxLayout()
+    row_maps.addWidget(maps_le, 1)
+    row_maps.addWidget(maps_browse)
     collection_le = QLineEdit()
+    collection_browse = QPushButton("Browse")
+    row_collection = QHBoxLayout()
+    row_collection.addWidget(collection_le, 1)
+    row_collection.addWidget(collection_browse)
     form = QFormLayout()
     form.addRow("Commandlet:", row_cmdlet)
-    form.addRow("Packages/Paths (;)", packages_le)
-    form.addRow("Maps (;)", maps_le)
-    form.addRow("Collection", collection_le)
+    form.addRow("Project", row_project)
+    form.addRow("Packages/Paths (;)", row_packages)
+    form.addRow("Maps (;)", row_maps)
+    form.addRow("Collection", row_collection)
     box = QGroupBox("Commandlet & Scope")
     box.setLayout(form)
     return ScopeGroup(
@@ -92,9 +109,14 @@ def create_scope_group(commandlets: list[str]) -> ScopeGroup:
         add_btn,
         edit_btn,
         remove_btn,
+        project_le,
+        project_browse,
         packages_le,
+        packages_browse,
         maps_le,
+        maps_browse,
         collection_le,
+        collection_browse,
     )
 
 
@@ -167,7 +189,6 @@ def create_run_controls(
     stop_cb: Callable[[], None],
 ) -> RunControls:
     preview_le = QLineEdit()
-    preview_le.setReadOnly(True)
     preview_le.setObjectName("preview_le")
     btn_copy = QPushButton("Copy")
     btn_copy.clicked.connect(copy_cb)
