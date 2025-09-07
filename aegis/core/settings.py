@@ -63,5 +63,17 @@ class Settings:
         else:
             self.s.setValue("profile/path", path)
 
+    # Pak/IoStore panel paths
+    def pak_path(self, key: str) -> str | None:
+        """Return a stored path for the Pak/IoStore panel."""
+        return self.s.value(f"pak/{key}", None, type=str)
+
+    def set_pak_path(self, key: str, path: str | None) -> None:
+        """Store a path for the Pak/IoStore panel."""
+        if not path:
+            self.s.remove(f"pak/{key}")
+        else:
+            self.s.setValue(f"pak/{key}", path)
+
 
 settings = Settings()

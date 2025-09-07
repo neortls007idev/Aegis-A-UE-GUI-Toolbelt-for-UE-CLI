@@ -67,6 +67,7 @@ class MainWindow(
         self.command_editor = tabs.command_editor
         self.build_tabs = tabs.build_tabs
         self.uaft_panel = tabs.uaft_panel
+        self.pak_panel = tabs.pak_panel
         self.info_bar = tabs.info_bar
         self.setCentralWidget(tabs.central)
 

@@ -26,6 +26,7 @@ class TabSetup:
     command_editor: CommandEditor
     build_tabs: QTabWidget
     uaft_panel: UaftPanel
+    pak_panel: PakIoStorePanel
 
 
 def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetup:
@@ -52,10 +53,12 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
     uaft_layout = QVBoxLayout(uaft_container)
     uaft_layout.addWidget(uaft_panel, 1)
 
+    pak_panel = PakIoStorePanel()
+
     tabs.addTab(env_container, "EnvDoc")
     tabs.addTab(build_container, "Build")
     tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
-    tabs.addTab(PakIoStorePanel(), "Pak / IoStore")
+    tabs.addTab(pak_panel, "Pak / IoStore")
     tabs.addTab(uaft_container, "Devices / UAFT")
     tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
     tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
@@ -75,4 +78,5 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
         command_editor=command_editor,
         build_tabs=build_tabs,
         uaft_panel=uaft_panel,
+        pak_panel=pak_panel,
     )

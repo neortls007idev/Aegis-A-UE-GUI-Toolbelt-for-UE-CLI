@@ -6,6 +6,10 @@ pytest.importorskip("PySide6")
 
 from pathlib import Path
 
+from aegis.core.profile import Profile
+from aegis.core.settings import settings
+from aegis.ui.widgets.pak_iostore_panel import PakIoStorePanel
+
 from aegis.ui.widgets.pak_iostore.utils import (
     build_iostore_cmd,
     build_unrealpak_cmd,
@@ -82,3 +86,24 @@ def test_compare_dirs(tmp_path: Path) -> None:
     assert only_a == {"only_a.txt"}
     assert only_b == {"only_b.txt"}
     assert diff == {"diff.txt"}
+
+
+def test_panel_autopick_and_cache(tmp_path: Path, qtbot) -> None:
+    engine = tmp_path / "UE"
+    bin_dir = engine / "Engine" / "Binaries" / "Win64"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "UnrealPak.exe").write_text("x")
+    (bin_dir / "IoStoreUtilities.exe").write_text("x")
+    proj = tmp_path / "Proj"
+    proj.mkdir()
+    profile = Profile(engine_root=engine, project_dir=proj)
+    panel = PakIoStorePanel()
+    qtbot.addWidget(panel)
+    settings.set_pak_path("dir_root", None)
+    panel.update_profile(profile)
+    assert panel.unrealpak_path == bin_dir / "UnrealPak.exe"
+    assert panel.iostore_path == bin_dir / "IoStoreUtilities.exe"
+    assert panel.dir_tab.dir_root.text() == str(proj)
+    new_dir = tmp_path / "Other"
+    panel.dir_tab.dir_root.setText(str(new_dir))
+    assert settings.pak_path("dir_root") == str(new_dir)
