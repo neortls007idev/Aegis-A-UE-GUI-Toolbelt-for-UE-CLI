@@ -1,3 +1,5 @@
+"""Persistence layer for user-facing application preferences."""
+
 from __future__ import annotations
 
 import json

@@ -1,3 +1,5 @@
+"""Environment Doctor panel verifying SDK locations and tooling."""
+
 from __future__ import annotations
 
 import configparser
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.core.ini_parser import get_value, parse_ini
+from aegis.core.sdk_utils import detect_sdk_version
 from .env_fix_dialog import EnvFixDialog
 
 
@@ -89,45 +92,6 @@ class EnvDocPanel(QWidget):
         self._run_checks()
 
     # ----- Checks -----
-    def _detect_version(self, component: str, path: Path) -> tuple[str, QColor | None]:
-        """Return version string and optional color for warning."""
-        try:
-            if component == "Android SDK":
-                platforms = path / "platforms"
-                if platforms.exists():
-                    versions: list[int] = []
-                    for p in platforms.iterdir():
-                        if p.is_dir() and p.name.startswith("android-"):
-                            try:
-                                versions.append(int(p.name.split("-", 1)[1]))
-                            except ValueError:
-                                continue
-                    if versions:
-                        return str(max(versions)), None
-                prop = path / "source.properties"
-                if prop.exists():
-                    for line in prop.read_text(encoding="utf-8").splitlines():
-                        if line.startswith("Pkg.Revision="):
-                            return line.split("=", 1)[1].strip(), None
-            elif component == "Android NDK":
-                if path.name != "ndk":
-                    return path.name, None
-                prop = path / "source.properties"
-                if prop.exists():
-                    for line in prop.read_text(encoding="utf-8").splitlines():
-                        if line.startswith("Pkg.Revision="):
-                            return line.split("=", 1)[1].strip(), None
-            elif component == "JDK":
-                rel = path / "release"
-                if rel.exists():
-                    for line in rel.read_text(encoding="utf-8").splitlines():
-                        if line.startswith("JAVA_VERSION="):
-                            return line.split("=", 1)[1].strip().strip('"'), None
-            elif component == "Vulkan SDK":
-                return path.name, None
-        except Exception:  # pragma: no cover - best effort
-            pass
-        return "Version Unknown", QColor("#c80")
 
     def _version_from_cmd(self, argv: list[str]) -> str | None:
         try:
@@ -212,10 +176,10 @@ class EnvDocPanel(QWidget):
             self.table.setItem(row, 1, QTableWidgetItem(str(path)))
             version_item = QTableWidgetItem("")
             if path.is_dir():
-                ver, color = self._detect_version(name, path)
-                version_item.setText(ver)
-                if color:
-                    version_item.setForeground(color)
+                info = detect_sdk_version(name, path)
+                version_item.setText(info.version)
+                if info.warn:
+                    version_item.setForeground(QColor("#c80"))
                 status_item = QTableWidgetItem("Found")
                 status_item.setForeground(QColor("#0a0"))
             elif path.exists():
@@ -492,15 +456,19 @@ class EnvDocPanel(QWidget):
                 self.log("[env] SDKs are Engine compatible", "success")
         else:
             if min_sdk:
-                p = (platforms / f"android-{min_sdk}") if platforms else None
-                if p and p.exists():
+                min_plat: Path | None = (
+                    platforms / f"android-{min_sdk}" if platforms else None
+                )
+                if min_plat and min_plat.exists():
                     self.log(f"[env] MinSDK {min_sdk} OK", "success")
                 else:
                     self.log(f"[env] Missing platform android-{min_sdk}", "warning")
                     all_ok = False
             if target_sdk and target_sdk != min_sdk:
-                p = (platforms / f"android-{target_sdk}") if platforms else None
-                if p and p.exists():
+                tgt_plat: Path | None = (
+                    platforms / f"android-{target_sdk}" if platforms else None
+                )
+                if tgt_plat and tgt_plat.exists():
                     self.log(f"[env] TargetSDK {target_sdk} OK", "success")
                 else:
                     self.log(f"[env] Missing platform android-{target_sdk}", "warning")
