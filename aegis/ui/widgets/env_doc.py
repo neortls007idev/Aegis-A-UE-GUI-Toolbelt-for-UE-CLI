@@ -8,7 +8,7 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
+from tempfile import TemporaryDirectory
 import urllib.request
 from pathlib import Path
 from typing import Callable, Optional
@@ -48,6 +48,7 @@ class EnvDocPanel(QWidget):
         self.log = log_cb
         self.profile: Profile | None = None
         self.sdk_path: Path | None = None
+        self._tmp_dir: TemporaryDirectory[str] | None = None
 
         layout = QVBoxLayout(self)
         self.table = QTableWidget(0, 6)
@@ -500,7 +501,8 @@ class EnvDocPanel(QWidget):
             self.log(f"[env] {component} missing", "warning")
 
     def _collect_scripts(self) -> dict[str, Path]:
-        assert self.profile
+        if self.profile is None:
+            raise RuntimeError("profile not loaded")
         root = self.profile.engine_root
         scripts: dict[str, Path] = {}
         android_dir = root / "Extras" / "Android"
@@ -517,7 +519,8 @@ class EnvDocPanel(QWidget):
         try:
             with urllib.request.urlopen(REMOTE_FIX_SCRIPTS_INDEX) as resp:
                 data = json.load(resp)
-            tmp_dir = Path(tempfile.mkdtemp(prefix="aegis_fix_"))
+            self._tmp_dir = TemporaryDirectory(prefix="aegis_fix_")
+            tmp_dir = Path(self._tmp_dir.name)
             for entry in data:
                 name = entry.get("name")
                 url = entry.get("url")
@@ -528,6 +531,9 @@ class EnvDocPanel(QWidget):
                 scripts[name] = dest
         except Exception as exc:  # pragma: no cover - network issues
             self.log(f"[env] {exc}", "error")
+            if self._tmp_dir is not None:
+                self._tmp_dir.cleanup()
+                self._tmp_dir = None
         return scripts
 
     def _run_scripts(self, scripts: list[Path]) -> None:
@@ -563,3 +569,7 @@ class EnvDocPanel(QWidget):
             ps_cmd = f"$p=Start-Process -FilePath '{script}' {args_part}-Verb RunAs -Wait -PassThru; exit $p.ExitCode"
             return ["powershell", "-NoProfile", "-Command", ps_cmd]
         return ["sudo", str(script), *extra_args]
+
+    def __del__(self) -> None:
+        if self._tmp_dir is not None:
+            self._tmp_dir.cleanup()

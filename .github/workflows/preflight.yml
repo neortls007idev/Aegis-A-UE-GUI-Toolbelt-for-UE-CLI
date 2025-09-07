@@ -33,7 +33,6 @@ jobs:
             ${{ runner.os }}-pip-
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-        continue-on-error: true
       - name: Verify installation
         run: python -m pip check
         continue-on-error: true

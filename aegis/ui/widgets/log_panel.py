@@ -1,3 +1,8 @@
+"""Dockable panel displaying streamed log messages.
+
+Refer to ``aegis/ui/AGENTS.md`` for widget naming conventions.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -37,18 +42,22 @@ class LogPanel(QDockWidget):
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
+        self.log.setObjectName("log_text_edit")
         self.messages: list[tuple[str, str, str]] = []
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search…")
         self.search.textChanged.connect(self.refresh_view)
+        self.search.setObjectName("search_le")
 
         self.filter = QComboBox()
         self.filter.addItems(["All", "Info", "Warning", "Error", "Success"])
         self.filter.currentTextChanged.connect(self.refresh_view)
+        self.filter.setObjectName("filter_cb")
 
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.clicked.connect(self.clear)
+        self.clear_btn.setObjectName("clear_btn")
 
         container = QWidget()
         layout = QVBoxLayout(container)

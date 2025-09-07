@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from aegis.core.settings import settings
 from aegis.core.preferences import preferences
 from aegis.core.task_runner import TaskRunner
+from aegis.core.metadata import FEEDBACK_EMAIL, REPO_URL
 from aegis.ui.init_tabs import init_tabs
 from aegis.ui.key_binding_actions import KeyBindingActions
 from aegis.ui.log_color_actions import LogColorActions
@@ -138,19 +139,14 @@ class MainWindow(
             import urllib.parse
 
             query = urllib.parse.urlencode({"subject": subject, "body": body})
-            QDesktopServices.openUrl(
-                QUrl(f"mailto:rahulguptagamedev@gmail.com?{query}")
-            )
+            QDesktopServices.openUrl(QUrl(f"mailto:{FEEDBACK_EMAIL}?{query}"))
 
     def _show_about(self) -> None:
         version = self._get_version()
-        repo_url = (
-            "https://github.com/rahulguptagamedev/Aegis-A-UE-GUI-Toolbelt-for-UE-CLI"
-        )
         info = (
             f"<b>Aegis Toolbelt</b><br>Version: {version}<br>"
             "Author: Rahul Gupta<br>"
-            f"Repository: <a href='{repo_url}'>{repo_url}</a><br>"
+            f"Repository: <a href='{REPO_URL}'>{REPO_URL}</a><br>"
             "A UE GUI toolbelt for Unreal Engine command-line tools.<br>"
             "Licensed under the <a href='https://www.apache.org/licenses/LICENSE-2.0'>Apache 2.0 License</a>."
         )
