@@ -25,3 +25,24 @@ Thumbs.db
 # Release archives
 *.zip
 *.tar.gz
+
+# Build & IDE junk
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.opensdf
+*.opendb
+DerivedDataCache/
+Intermediate/
+Saved/
+Binaries/
+Build/Android/**/gradle*
+Build/IOS/**/DerivedData/
+*.VC.db
+
+# CMake
+build*/
+out*/
+cmake-build-*/

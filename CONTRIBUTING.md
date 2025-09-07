@@ -1,5 +1,20 @@
 # Contributing
 
+Thanks for contributing to Aegis!
+
+## Workflow
+- Create a feature branch: `feat/<short>`, `fix/<short>`, `chore/<short>`, `docs/<short>`, or `refactor/<short>`.
+- Use conventional commits: `feat(core): add task runner JSON export`.
+- Keep PRs small and single-purpose. Include before/after screenshots for UI changes.
+
+## Checks
+- C++: `clang-format` and `clang-tidy` clean; no new warnings; IWYU where practical.
+- Python: `black`, `ruff`, `mypy` clean.
+- Tests pass locally; CI is green.
+
+## Style
+Follow `CODING_STANDARDS.md`. Highlights: Allman braces; spaces in parens; PascalCase methods; camelCase vars; members `mXxx`.
+
 ## Development setup
 1. Install Python 3.11+.
 2. Create a virtual environment and install dependencies:
