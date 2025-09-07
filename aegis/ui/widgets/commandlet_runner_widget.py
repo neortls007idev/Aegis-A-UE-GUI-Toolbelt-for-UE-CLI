@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.modules.commandlets import (
+    DEFAULT_COMMANDLETS,
     CommandletFlags,
     CommandletRecipe,
     build_argv,
@@ -45,6 +46,8 @@ class CommandletRunnerWidget(QWidget):
         self.paths: crg.PathsGroup = crg.create_paths_group(self._browse)
         self.scope: crg.ScopeGroup = crg.create_scope_group(load_commandlets(None))
         self.scope.add_btn.clicked.connect(self._add_cmdlet)
+        self.scope.edit_btn.clicked.connect(self._edit_cmdlet)
+        self.scope.remove_btn.clicked.connect(self._remove_cmdlet)
         self.flags: crg.FlagsGroup = crg.create_flags_group()
         self.controls: crg.RunControls = crg.create_run_controls(
             lambda: QGuiApplication.clipboard().setText(
@@ -65,6 +68,9 @@ class CommandletRunnerWidget(QWidget):
             self.scope.packages_le,
             self.scope.maps_le,
             self.scope.collection_le,
+            self.scope.add_btn,
+            self.scope.edit_btn,
+            self.scope.remove_btn,
             self.flags.flag_unatt,
             self.flags.flag_nop4,
             self.flags.flag_nullrhi,
@@ -124,6 +130,41 @@ class CommandletRunnerWidget(QWidget):
                     for i in range(self.scope.cmdlet_cb.count())
                 ]
                 save_commandlets(Path(proj), cmds)
+            self._dry_run()
+
+    def _edit_cmdlet(self) -> None:
+        current = self.scope.cmdlet_cb.currentText()
+        if current in DEFAULT_COMMANDLETS:
+            return
+        name, ok = QInputDialog.getText(
+            self, "Edit Commandlet", "Commandlet name:", text=current
+        )
+        if ok and name and name != current:
+            idx = self.scope.cmdlet_cb.currentIndex()
+            self.scope.cmdlet_cb.setItemText(idx, name)
+            proj = self.paths.proj_le.text()
+            if proj:
+                cmds = [
+                    self.scope.cmdlet_cb.itemText(i)
+                    for i in range(self.scope.cmdlet_cb.count())
+                ]
+                save_commandlets(Path(proj), cmds)
+            self._dry_run()
+
+    def _remove_cmdlet(self) -> None:
+        current = self.scope.cmdlet_cb.currentText()
+        if current in DEFAULT_COMMANDLETS:
+            return
+        idx = self.scope.cmdlet_cb.currentIndex()
+        self.scope.cmdlet_cb.removeItem(idx)
+        proj = self.paths.proj_le.text()
+        if proj:
+            cmds = [
+                self.scope.cmdlet_cb.itemText(i)
+                for i in range(self.scope.cmdlet_cb.count())
+            ]
+            save_commandlets(Path(proj), cmds)
+        self._dry_run()
 
     def _recipe(self) -> CommandletRecipe:
         flags = CommandletFlags(
