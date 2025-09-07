@@ -85,5 +85,14 @@ When introducing another command‑line tool:
 4. Persist any settings via `settings.py` or `profile.py` and follow existing
    theming and layout conventions.
 
+## Tests & Automation
+
+The Tests tab provides helpers for Gauntlet and BuildGraph workflows. The
+Gauntlet runner assembles `RunUAT Gauntlet` commands with CSV profiler and
+Unreal Insights capture, optional device selectors, and auto-detected engine
+paths. The BuildGraph runner executes XML presets for deterministic packaging
+flows such as Windows clients, Android AAB/OBB builds, and tools bundles.
+See `test_automation.md` for the full design.
+
 This separation ensures one‑click actions with accurate previews, guardrails,
 and self‑service logs while keeping the codebase straightforward to grow.
