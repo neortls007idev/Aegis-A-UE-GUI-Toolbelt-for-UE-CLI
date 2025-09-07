@@ -13,6 +13,7 @@ from aegis.ui.widgets.command_editor import CommandEditor
 from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 from aegis.ui.widgets.uaft_panel import UaftPanel
+from aegis.ui.widgets.pak_iostore_panel import PakIoStorePanel
 
 
 @dataclass
@@ -54,7 +55,7 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
     tabs.addTab(env_container, "EnvDoc")
     tabs.addTab(build_container, "Build")
     tabs.addTab(QTextEdit("Commandlets (stub)"), "Commandlets")
-    tabs.addTab(QTextEdit("Pak/IoStore (stub)"), "Pak/IoStore")
+    tabs.addTab(PakIoStorePanel(), "Pak / IoStore")
     tabs.addTab(uaft_container, "Devices / UAFT")
     tabs.addTab(QTextEdit("Tests (stub)"), "Tests")
     tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
