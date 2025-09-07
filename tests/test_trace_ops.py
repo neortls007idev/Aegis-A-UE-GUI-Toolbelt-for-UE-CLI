@@ -20,3 +20,12 @@ def test_server_argv(tmp_path: Path) -> None:
     argv = ctrl.server_argv(bin_root, Path("/store"))
     assert argv[0].endswith("UnrealTraceServer.exe")
     assert "--store" in argv
+
+
+def test_engine_bin_path_handles_engine_subdir(tmp_path: Path) -> None:
+    ctrl = TraceOpsController()
+    repo_root = tmp_path / "UE"
+    engine_dir = repo_root / "Engine"
+    (engine_dir / "Binaries").mkdir(parents=True)
+    assert ctrl.engine_bin_path(repo_root) == engine_dir / "Binaries"
+    assert ctrl.engine_bin_path(engine_dir) == engine_dir / "Binaries"

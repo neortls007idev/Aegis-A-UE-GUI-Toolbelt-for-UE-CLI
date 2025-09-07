@@ -35,3 +35,23 @@ def test_profile_auto_paths(tmp_path: Path, qtbot) -> None:
     expected = project_dir / "Unreal Insights" / "MyTrace"
     assert page.store_edit.text() == str(expected)
     assert page.launch_insights_btn.isEnabled()
+
+
+def test_profile_engine_subdir(tmp_path: Path, qtbot) -> None:
+    engine_root = tmp_path / "UE" / "Engine"
+    plat = "Win64" if sys.platform == "win32" else "Linux"
+    bin_root = engine_root / "Binaries"
+    bin_dir = bin_root / plat
+    bin_dir.mkdir(parents=True)
+    (
+        bin_dir
+        / ("UnrealInsights.exe" if sys.platform == "win32" else "UnrealInsights")
+    ).write_text("x")
+    project_dir = tmp_path / "Proj"
+    project_dir.mkdir()
+    profile = Profile(engine_root=engine_root, project_dir=project_dir)
+    page = TraceOpsPage(TraceOpsController(), _noop_log)
+    qtbot.addWidget(page)
+    page.update_profile(profile)
+    assert page.engine_label.text() == str(bin_root)
+    assert page.launch_insights_btn.isEnabled()

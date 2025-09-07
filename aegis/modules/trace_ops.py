@@ -36,23 +36,43 @@ class TraceOpsController:
         self.port = 1981
 
     # ----- Server -----
+    @staticmethod
+    def engine_dir(engine_root: Path) -> Path:
+        """Return the Engine directory for a given Unreal root."""
+        eng = engine_root / "Engine"
+        return eng if eng.is_dir() else engine_root
+
+    @classmethod
+    def engine_bin_path(cls, engine_root: Path) -> Path:
+        """Return the ``Engine/Binaries`` directory for ``engine_root``.
+
+        ``engine_root`` should point to the Unreal repository root or the
+        ``Engine`` subdirectory. Do **not** include ``Binaries``; this helper
+        appends it after normalizing the root.
+        """
+        return cls.engine_dir(engine_root) / "Binaries"
+
     def _find_binary(self, engine_bin: Path, names: Iterable[str]) -> Path | None:
+        """Search ``engine_bin`` and its subfolders for an executable."""
         candidates = [engine_bin / name for name in names]
-        for sub in engine_bin.iterdir():
-            if sub.is_dir():
-                for name in names:
-                    candidates.append(sub / name)
+        if engine_bin.exists():
+            for sub in engine_bin.iterdir():
+                if sub.is_dir():
+                    for name in names:
+                        candidates.append(sub / name)
         for cand in candidates:
             if cand.exists():
                 return cand
         return None
 
     def find_trace_server_bin(self, engine_bin: Path) -> Path | None:
+        """Locate the Unreal Trace Server executable."""
         return self._find_binary(
             engine_bin, ["UnrealTraceServer.exe", "UnrealTraceServer"]
         )
 
     def find_insights_bin(self, engine_bin: Path) -> Path | None:
+        """Locate the Unreal Insights executable."""
         return self._find_binary(engine_bin, ["UnrealInsights.exe", "UnrealInsights"])
 
     def server_argv(self, engine_bin: Path, store_dir: Path | None) -> list[str]:
@@ -114,8 +134,9 @@ class TraceOpsController:
         return argv
 
     def rebuild_insights(self, engine_root: Path) -> list[str]:
+        engine_dir = self.engine_dir(engine_root)
         script_name = "RunUAT.bat" if sys.platform == "win32" else "RunUAT.sh"
-        script = engine_root / "Engine" / "Build" / "BatchFiles" / script_name
+        script = engine_dir / "Build" / "BatchFiles" / script_name
         argv = [str(script), "BuildUnrealInsights"]
         subprocess.Popen(argv, text=True)
         return argv

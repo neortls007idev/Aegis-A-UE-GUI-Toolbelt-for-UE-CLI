@@ -55,3 +55,19 @@ def test_profile_change_updates_trace_ops_page(tmp_path: Path, qtbot) -> None:
     actions.profile = profile
     actions._profile_changed()
     assert page.engine_label.text() == str(bin_root)
+
+
+def test_profile_change_engine_subdir(tmp_path: Path, qtbot) -> None:
+    engine = tmp_path / "UE" / "Engine"
+    plat = "Win64" if sys.platform == "win32" else "Linux"
+    bin_root = engine / "Binaries"
+    (bin_root / plat).mkdir(parents=True)
+    project_dir = tmp_path / "Proj"
+    project_dir.mkdir()
+    profile = Profile(engine_root=engine, project_dir=project_dir)
+    page = TraceOpsPage(TraceOpsController(), _noop_log)
+    qtbot.addWidget(page)
+    actions = _StubActions(page)
+    actions.profile = profile
+    actions._profile_changed()
+    assert page.engine_label.text() == str(bin_root)
