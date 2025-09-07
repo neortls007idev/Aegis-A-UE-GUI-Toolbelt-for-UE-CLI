@@ -5,19 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Dict
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
     QComboBox,
+    QSizePolicy,
 )
 
 from aegis.core.task_runner import TaskRunner
@@ -62,9 +62,11 @@ class BuildGraphPanel(QWidget):
         self.runner = runner
         self.log = log_cb
 
-        self.runuat_edit = QLineEdit()
-        self.runuat_btn = QPushButton("Browse…")
-        self.runuat_btn.clicked.connect(self._pick_runuat)
+        self.runuat_label = QLabel("RunUAT: (not found)")
+        self.runuat_label.setObjectName("runuat_lbl")
+        self.runuat_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.runuat_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.runuat_path: Path | None = None
 
         self.script_combo = QComboBox()
         self.script_combo.addItems(list(PRESETS.keys()))
@@ -76,8 +78,6 @@ class BuildGraphPanel(QWidget):
 
         self.preview = QTextEdit()
         self.preview.setReadOnly(True)
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
         self.dry_run_btn = QPushButton("Dry Run")
         self.dry_run_btn.clicked.connect(self._dry_run)
         self.run_btn = QPushButton("Run")
@@ -92,7 +92,7 @@ class BuildGraphPanel(QWidget):
         root = QVBoxLayout(self)
         paths = QGroupBox("Paths & Preset")
         lp = QVBoxLayout(paths)
-        lp.addLayout(self._row(QLabel("RunUAT"), self.runuat_edit, self.runuat_btn))
+        lp.addLayout(self._row(self.runuat_label))
         lp.addLayout(self._row(QLabel("Preset"), self.script_combo))
         lp.addLayout(self.vars_form)
         root.addWidget(paths)
@@ -104,10 +104,7 @@ class BuildGraphPanel(QWidget):
         ctrl.addStretch(1)
         root.addLayout(ctrl)
 
-        tabs = QTabWidget()
-        tabs.addTab(self.preview, "Preview")
-        tabs.addTab(self.log_view, "Log")
-        root.addWidget(tabs, 1)
+        root.addWidget(self.preview, 1)
 
     def _row(self, *widgets) -> QHBoxLayout:
         layout = QHBoxLayout()
@@ -127,17 +124,15 @@ class BuildGraphPanel(QWidget):
             self.vars_edits[key] = edit
 
     # ----- File pickers -----
-    def _pick_runuat(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select RunUAT")
-        if path:
-            self.runuat_edit.setText(path)
-
     # ----- Profile -----
     def update_profile(self, profile: Profile | None) -> None:
         if not profile:
+            self.runuat_label.setText("RunUAT: (not found)")
+            self.runuat_path = None
             return
         runuat = profile.engine_root / "Engine" / "Build" / "BatchFiles" / "RunUAT.bat"
-        self.runuat_edit.setText(str(runuat))
+        self.runuat_label.setText(f"RunUAT: {runuat}")
+        self.runuat_path = runuat
         proj_edit = self.vars_edits.get("Project")
         if proj_edit:
             for uproj in profile.project_dir.glob("*.uproject"):
@@ -151,7 +146,7 @@ class BuildGraphPanel(QWidget):
         script = Path(f"docs/buildgraph/presets/{preset.lower().replace('-', '_')}.xml")
         sets = {k: e.text() for k, e in self.vars_edits.items() if e.text()}
         return BuildGraph(
-            runuat=Path(self.runuat_edit.text()),
+            runuat=self.runuat_path or Path(),
             script=script,
             target="ArchiveClient" if preset != "Tools-Pack" else "ArchiveTools",
             sets=sets,
@@ -168,7 +163,6 @@ class BuildGraphPanel(QWidget):
     def _run(self) -> None:
         argv = self._compose()
         self.preview.setPlainText("\n".join(argv))
-        self.log_view.clear()
         self.runner.start(
             argv,
             lambda s: self._append_log(s, "stdout"),
@@ -178,4 +172,3 @@ class BuildGraphPanel(QWidget):
 
     def _append_log(self, line: str, stream: str) -> None:
         self.log(stream, line)
-        self.log_view.append(f"[{stream}] {line}")

@@ -28,6 +28,6 @@ def test_gauntlet_panel_autofills(tmp_path: Path, qtbot) -> None:
     panel = GauntletPanel(TaskRunner(), _noop_log)
     qtbot.addWidget(panel)
     panel.update_profile(profile)
-    assert panel.runuat_edit.text() == str(batch_dir / "RunUAT.bat")
-    assert panel.project_edit.text() == str(uproj)
-    assert panel.editor_edit.text() == str(bin_dir / "UnrealEditor-Cmd.exe")
+    assert panel.runuat_path == batch_dir / "RunUAT.bat"
+    assert panel.project_path == uproj
+    assert panel.editor_path == bin_dir / "UnrealEditor-Cmd.exe"
