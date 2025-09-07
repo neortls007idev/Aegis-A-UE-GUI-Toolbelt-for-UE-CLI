@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from PySide6.QtWidgets import QTabWidget, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
 from aegis.core.task_runner import TaskRunner
 from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
@@ -74,7 +74,6 @@ def init_tabs(runner: TaskRunner, log_cb: Callable[[str, str], None]) -> TabSetu
     tabs.addTab(pak_panel, "Pak / IoStore")
     tabs.addTab(uaft_container, "Devices / UAFT")
     tabs.addTab(tests_tabs, "Tests")
-    tabs.addTab(QTextEdit("Trace Ops (stub)"), "Trace Ops")
 
     info_bar = ProfileInfoBar()
     central = QWidget()

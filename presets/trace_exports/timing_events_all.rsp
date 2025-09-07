@@ -1,0 +1,1 @@
+TimingInsights.ExportTimingEvents ./CSV/TimingEvents.csv -timers="*"

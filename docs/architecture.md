@@ -30,7 +30,8 @@ and widgets.
 ## Modules
 
 `aegis/modules` contains thin adapters around command‑line tools such as
-`uaft.py`, `uat.py`, and `ubt.py`.
+`uaft.py`, `uat.py`, and `ubt.py`.  Trace utilities live in
+`trace_ops.py`.
 
 Responsibilities:
 
@@ -53,7 +54,7 @@ To add a new CLI integration:
 All Qt code lives under `aegis/ui`:
 
 - `main_window.py` configures the `QMainWindow` and dock widgets.
-- `pages/` groups high‑level views.
+- `pages/` groups high‑level views like the Trace Ops page.
 - `widgets/` holds dockable panels such as `log_panel.py`,
   `batch_builder_panel.py`, and `uaft_panel.py`.
 - `themes/` contains QSS files (`dark.qss`, `light.qss`, `high_contrast.qss`).
