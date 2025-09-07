@@ -26,6 +26,8 @@ from aegis.core.preferences import preferences
 from aegis.core.task_runner import TaskRunner
 from aegis.core.metadata import FEEDBACK_EMAIL, REPO_URL
 from aegis.ui.init_tabs import init_tabs
+from aegis.modules.trace_ops import TraceOpsController
+from aegis.ui.pages.page_trace_ops import TraceOpsPage
 from aegis.ui.key_binding_actions import KeyBindingActions
 from aegis.ui.log_color_actions import LogColorActions
 from aegis.ui.profile_actions import ProfileActions
@@ -71,6 +73,9 @@ class MainWindow(
         self.commandlet_runner = tabs.commandlet_runner
         self.gauntlet_panel = tabs.gauntlet_panel
         self.buildgraph_panel = tabs.buildgraph_panel
+        self.trace_controller = TraceOpsController()
+        self.trace_ops_page = TraceOpsPage(self.trace_controller, self._log)
+        self.tabs.addTab(self.trace_ops_page, "Trace Ops")
         self.info_bar = tabs.info_bar
         self.setCentralWidget(tabs.central)
 

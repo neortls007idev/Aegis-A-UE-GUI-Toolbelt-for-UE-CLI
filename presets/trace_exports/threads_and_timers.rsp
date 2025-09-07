@@ -1,0 +1,2 @@
+TimingInsights.ExportThreads ./CSV/Threads.csv
+TimingInsights.ExportTimers ./CSV/Timers.csv
