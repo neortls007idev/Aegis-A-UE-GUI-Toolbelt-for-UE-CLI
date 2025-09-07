@@ -11,6 +11,7 @@ from aegis.ui.widgets.profile_info_bar import ProfileInfoBar
 from aegis.ui.widgets.env_doc import EnvDocPanel
 from aegis.ui.widgets.batch_builder_panel import BatchBuilderPanel
 from aegis.ui.widgets.uaft_panel import UaftPanel
+from aegis.ui.widgets.pak_iostore_panel import PakIoStorePanel
 from typing import Callable
 
 
@@ -20,6 +21,7 @@ class ProfileActions:
     env_doc: EnvDocPanel
     batch_panel: BatchBuilderPanel
     uaft_panel: UaftPanel
+    pak_panel: PakIoStorePanel
     _log: Callable[[str, str], None]
     setWindowTitle: Callable[[str], None]
 
@@ -107,3 +109,4 @@ class ProfileActions:
         self.env_doc.update_profile(self.profile)
         self.batch_panel.update_profile(self.profile)
         self.uaft_panel.update_profile(self.profile)
+        self.pak_panel.update_profile(self.profile)
