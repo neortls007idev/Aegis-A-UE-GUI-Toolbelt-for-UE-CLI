@@ -1,0 +1,27 @@
+<BuildGraph>
+  <Define Name="Project"/>
+  <Define Name="Platform"/>
+  <Define Name="Config"/>
+  <Define Name="Keystore"/>
+  <Define Name="KeyAlias"/>
+  <Define Name="KeyStorePassEnvVar"/>
+  <Define Name="ArchiveDir"/>
+  <Node Name="BuildClient">
+    <Run Command="echo build android" />
+  </Node>
+  <Node Name="CookClient" Requires="BuildClient">
+    <Run Command="echo cook" />
+  </Node>
+  <Node Name="StageClient" Requires="CookClient">
+    <Run Command="echo stage" />
+  </Node>
+  <Node Name="PakClient" Requires="StageClient">
+    <Run Command="echo pak" />
+  </Node>
+  <Node Name="PackageClient" Requires="PakClient">
+    <Run Command="echo package" />
+  </Node>
+  <Node Name="ArchiveClient" Requires="PackageClient">
+    <Run Command="echo archive to $(ArchiveDir)" />
+  </Node>
+</BuildGraph>
