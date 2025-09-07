@@ -131,9 +131,13 @@ class PakIoStorePanel(QWidget):
 
         btn_row = QHBoxLayout()
         self.single_list_btn = QPushButton("List")
+        self.single_search_btn = QPushButton("Search")
         self.single_extract_btn = QPushButton("Extract")
+        self.single_validate_btn = QPushButton("Validate")
         btn_row.addWidget(self.single_list_btn)
+        btn_row.addWidget(self.single_search_btn)
         btn_row.addWidget(self.single_extract_btn)
+        btn_row.addWidget(self.single_validate_btn)
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
 
@@ -166,6 +170,10 @@ class PakIoStorePanel(QWidget):
         self.dir_scan_btn = QPushButton("Scan")
         layout.addWidget(self.dir_scan_btn)
 
+        self.dir_search = QLineEdit()
+        self.dir_search.setPlaceholderText("Search...")
+        layout.addWidget(self.dir_search)
+
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Type", "Path", "Size", "Status"])
         self.table.setObjectName("pak_table")
@@ -175,10 +183,35 @@ class PakIoStorePanel(QWidget):
         btn_row = QHBoxLayout()
         self.dir_extract_sel = QPushButton("Extract Selected")
         self.dir_extract_all = QPushButton("Extract All")
+        self.dir_validate_sel = QPushButton("Validate Selected")
+        self.dir_validate_all = QPushButton("Validate All")
         btn_row.addWidget(self.dir_extract_sel)
         btn_row.addWidget(self.dir_extract_all)
+        btn_row.addWidget(self.dir_validate_sel)
+        btn_row.addWidget(self.dir_validate_all)
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
+
+        cmp_box = QGroupBox("Compare Builds")
+        cmp_layout = QVBoxLayout()
+        row_a = QHBoxLayout()
+        self.compare_a = QLineEdit()
+        self.compare_a_browse = QPushButton("Browse")
+        row_a.addWidget(QLabel("Dir A"))
+        row_a.addWidget(self.compare_a, 1)
+        row_a.addWidget(self.compare_a_browse)
+        cmp_layout.addLayout(row_a)
+        row_b = QHBoxLayout()
+        self.compare_b = QLineEdit()
+        self.compare_b_browse = QPushButton("Browse")
+        row_b.addWidget(QLabel("Dir B"))
+        row_b.addWidget(self.compare_b, 1)
+        row_b.addWidget(self.compare_b_browse)
+        cmp_layout.addLayout(row_b)
+        self.compare_btn = QPushButton("Compare Builds")
+        cmp_layout.addWidget(self.compare_btn)
+        cmp_box.setLayout(cmp_layout)
+        layout.addWidget(cmp_box)
 
         self.status_label = QLabel("Idle")
         layout.addWidget(self.status_label)
@@ -203,12 +236,24 @@ class PakIoStorePanel(QWidget):
             lambda: self._pick_file(self.aab_file, "AAB Files (*.aab)")
         )
         self.single_list_btn.clicked.connect(self._single_list)
+        self.single_search_btn.clicked.connect(self._single_search)
         self.single_extract_btn.clicked.connect(self._single_extract)
+        self.single_validate_btn.clicked.connect(self._single_validate)
 
         self.dir_browse.clicked.connect(self._pick_dir)
         self.dir_scan_btn.clicked.connect(self.scan_directory)
+        self.dir_search.textChanged.connect(self._filter_table)
         self.dir_extract_sel.clicked.connect(self._dir_extract_selected)
         self.dir_extract_all.clicked.connect(self._dir_extract_all)
+        self.dir_validate_sel.clicked.connect(self._dir_validate_selected)
+        self.dir_validate_all.clicked.connect(self._dir_validate_all)
+        self.compare_a_browse.clicked.connect(
+            lambda: self._pick_dir_into(self.compare_a)
+        )
+        self.compare_b_browse.clicked.connect(
+            lambda: self._pick_dir_into(self.compare_b)
+        )
+        self.compare_btn.clicked.connect(self._compare_builds)
 
         self.eula_chk.toggled.connect(self._update_extract_enabled)
         self.table.itemSelectionChanged.connect(self._update_extract_enabled)
@@ -245,6 +290,26 @@ class PakIoStorePanel(QWidget):
     def _set_row_status(self, row: int, status: str) -> None:
         self.table.setItem(row, 3, QTableWidgetItem(status))
 
+    def _filter_table(self, text: str) -> None:
+        text = text.lower()
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 1)
+            self.table.setRowHidden(row, text not in item.text().lower())
+
+    def _pick_dir_into(self, edit: QLineEdit) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Choose directory")
+        if path:
+            edit.setText(path)
+
+    def _compare_builds(self) -> None:
+        a = Path(self.compare_a.text())
+        b = Path(self.compare_b.text())
+        if not a.is_dir() or not b.is_dir():
+            self._log("Invalid compare directories")
+            return
+        task = Task("cmp", "compare", a, b, None)
+        self.worker.enqueue([task])
+
     def _on_worker_state(self) -> None:
         running, pending = self.worker.status()
         if running or pending:
@@ -254,12 +319,20 @@ class PakIoStorePanel(QWidget):
         self._update_extract_enabled()
 
     def _update_extract_enabled(self) -> None:
-        enable = self.eula_chk.isChecked() and not self.worker.is_busy()
+        busy = self.worker.is_busy()
+        enable = self.eula_chk.isChecked() and not busy
+        self.single_list_btn.setEnabled(not busy)
+        self.single_search_btn.setEnabled(not busy)
         self.single_extract_btn.setEnabled(enable)
+        self.single_validate_btn.setEnabled(enable)
+        self.dir_scan_btn.setEnabled(not busy)
         has_rows = self.table.rowCount() > 0
         has_sel = len(self.table.selectedIndexes()) > 0
         self.dir_extract_sel.setEnabled(enable and has_sel)
         self.dir_extract_all.setEnabled(enable and has_rows)
+        self.dir_validate_sel.setEnabled(enable and has_sel)
+        self.dir_validate_all.setEnabled(enable and has_rows)
+        self.compare_btn.setEnabled(not busy)
 
     # ----- Scan ---------------------------------------------------------
     def scan_directory(self) -> None:
@@ -274,7 +347,11 @@ class PakIoStorePanel(QWidget):
                 continue
             ext = p.suffix.lower()
             if ext == ".pak":
-                kind = "PAK"
+                name = p.name.lower()
+                if "dlc" in name or name.endswith("_p.pak"):
+                    kind = "PAK-DLC"
+                else:
+                    kind = "PAK"
             elif ext == ".utoc":
                 kind = "UTOC"
             elif ext in {".obb", ".aab"} and self.dir_unzip.isChecked():
@@ -292,39 +369,54 @@ class PakIoStorePanel(QWidget):
     # ----- Task queue ---------------------------------------------------
     def _dir_extract_selected(self) -> None:
         rows = {i.row() for i in self.table.selectedIndexes()}
-        self._enqueue_rows(sorted(rows))
+        self._enqueue_rows(sorted(rows), "extract")
 
     def _dir_extract_all(self) -> None:
-        self._enqueue_rows(list(range(self.table.rowCount())))
+        self._enqueue_rows(list(range(self.table.rowCount())), "extract")
 
-    def _enqueue_rows(self, rows: List[int]) -> None:
+    def _dir_validate_selected(self) -> None:
+        rows = {i.row() for i in self.table.selectedIndexes()}
+        self._enqueue_rows(sorted(rows), "validate")
+
+    def _dir_validate_all(self) -> None:
+        self._enqueue_rows(list(range(self.table.rowCount())), "validate")
+
+    def _enqueue_rows(self, rows: List[int], action: str) -> None:
         tasks: List[Task] = []
         for row in rows:
             path = Path(self.table.item(row, 1).text())
             ttype = self.table.item(row, 0).text()
-            if ttype == "PAK":
-                dest = dest_for(path, "_extracted")
+            if ttype.startswith("PAK"):
+                dest = None if action != "extract" else dest_for(path, "_extracted")
                 argv = build_unrealpak_cmd(
                     self.unrealpak_edit.text(),
                     path,
-                    "extract",
+                    action if action != "search" else "list",
                     dest,
                     self.pak_filter.text().strip() or None,
                 )
-                tasks.append(Task("proc", "extract", path, dest, row, argv))
-            elif ttype == "UTOC":
-                dest = dest_for(path, "_extracted")
+                tasks.append(Task("proc", action, path, dest, row, argv))
+            elif ttype.startswith("UTOC"):
+                dest = None if action != "extract" else dest_for(path, "_extracted")
                 argv = build_iostore_cmd(
-                    self.iostore_edit.text(), path, "extract", dest
+                    self.iostore_edit.text(),
+                    path,
+                    action if action != "search" else "list",
+                    dest,
                 )
-                tasks.append(Task("proc", "extract", path, dest, row, argv))
+                tasks.append(Task("proc", action, path, dest, row, argv))
             elif ttype == "ZIP":
-                dest = dest_for(path, "_unzipped")
-                tasks.append(Task("zip", "extract", path, dest, row))
+                dest = None if action != "extract" else dest_for(path, "_unzipped")
+                tasks.append(Task("zip", action, path, dest, row))
         self.worker.enqueue(tasks)
 
     def _single_list(self) -> None:
         task = self._single_task("list")
+        if task:
+            self.worker.enqueue([task])
+
+    def _single_search(self) -> None:
+        task = self._single_task("search")
         if task:
             self.worker.enqueue([task])
 
@@ -333,6 +425,11 @@ class PakIoStorePanel(QWidget):
             self._log("Ownership checkbox not ticked")
             return
         task = self._single_task("extract")
+        if task:
+            self.worker.enqueue([task])
+
+    def _single_validate(self) -> None:
+        task = self._single_task("validate")
         if task:
             self.worker.enqueue([task])
 
@@ -350,23 +447,39 @@ class PakIoStorePanel(QWidget):
                     self._log(f"Missing file: {path}")
                     return None
                 if kind == "unrealpak":
-                    dest = None if action == "list" else dest_for(path, suf)
+                    mode = (
+                        action if action in {"list", "extract", "validate"} else "list"
+                    )
+                    dest = (
+                        None
+                        if action in {"list", "search", "validate"}
+                        else dest_for(path, suf)
+                    )
                     argv = build_unrealpak_cmd(
                         self.unrealpak_edit.text(),
                         path,
-                        action,
+                        mode,
                         dest,
                         self.pak_filter.text().strip() or None,
                     )
                     return Task("proc", action, path, dest, None, argv)
                 if kind == "iostore":
-                    dest = None if action == "list" else dest_for(path, suf)
-                    argv = build_iostore_cmd(
-                        self.iostore_edit.text(), path, action, dest
+                    mode = (
+                        action if action in {"list", "extract", "validate"} else "list"
                     )
+                    dest = (
+                        None
+                        if action in {"list", "search", "validate"}
+                        else dest_for(path, suf)
+                    )
+                    argv = build_iostore_cmd(self.iostore_edit.text(), path, mode, dest)
                     return Task("proc", action, path, dest, None, argv)
                 tkind = "zip"
-                dest = None if action == "list" else dest_for(path, suf)
+                dest = (
+                    None
+                    if action in {"list", "search", "validate"}
+                    else dest_for(path, suf)
+                )
                 return Task(tkind, action, path, dest, None)
         self._log("No file selected")
         return None

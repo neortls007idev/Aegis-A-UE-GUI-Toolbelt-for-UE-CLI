@@ -8,15 +8,15 @@ from typing import Callable, List, Optional
 
 from PySide6.QtCore import QObject, QProcess, QTimer
 
-from .utils import build_iostore_cmd, build_unrealpak_cmd, dest_for
+from .utils import build_iostore_cmd, build_unrealpak_cmd, compare_dirs, dest_for
 
 
 @dataclass
 class Task:
     """Discrete unit of work."""
 
-    type: str  # 'proc' or 'zip'
-    action: str  # 'list' or 'extract'
+    type: str  # 'proc', 'zip', or 'cmp'
+    action: str  # 'list', 'extract', 'validate', 'search', 'compare'
     src: Path
     dest: Optional[Path]
     row: Optional[int]
@@ -87,6 +87,8 @@ class PakWorker(QObject):
             self.proc.start()
         elif task.type == "zip":
             QTimer.singleShot(0, lambda: self._run_zip(task))
+        elif task.type == "cmp":
+            QTimer.singleShot(0, lambda: self._run_compare(task))
         else:
             self._finish_task(1)
 
@@ -95,7 +97,13 @@ class PakWorker(QObject):
             return
         data = self.proc.readAllStandardOutput().data().decode(errors="ignore")
         if data:
-            self.log_cb(data.rstrip())
+            if self.current and self.current.action == "search":
+                term = self.pak_filter()
+                for line in data.splitlines():
+                    if term in line:
+                        self.log_cb(line)
+            else:
+                self.log_cb(data.rstrip())
 
     def _on_proc_finished(self, code: int, _status: QProcess.ExitStatus) -> None:
         self._finish_task(code)
@@ -104,15 +112,22 @@ class PakWorker(QObject):
         self.preview_cb(f"zipfile {task.action} {task.src}")
         try:
             with zipfile.ZipFile(task.src) as zf:
-                if task.action == "list":
-                    for name in zf.namelist():
+                names = zf.namelist()
+                if task.action in {"list", "validate"}:
+                    for name in names:
                         self.log_cb(name)
+                    code = 0
+                elif task.action == "search":
+                    filt = self.pak_filter()
+                    for name in names:
+                        if filt in name:
+                            self.log_cb(name)
                     code = 0
                 else:
                     dest = task.dest
                     assert dest is not None
                     dest.mkdir(parents=True, exist_ok=True)
-                    for name in zf.namelist():
+                    for name in names:
                         self.log_cb(name)
                     zf.extractall(dest)
                     code = 0
@@ -123,6 +138,18 @@ class PakWorker(QObject):
             self.log_cb(str(exc))
             code = 1
         self._finish_task(code)
+
+    def _run_compare(self, task: Task) -> None:
+        assert task.dest is not None
+        self.preview_cb(f"compare {task.src} {task.dest}")
+        only_a, only_b, diff = compare_dirs(task.src, task.dest)
+        for p in sorted(only_a):
+            self.log_cb(f"only in {task.src}: {p}")
+        for p in sorted(only_b):
+            self.log_cb(f"only in {task.dest}: {p}")
+        for p in sorted(diff):
+            self.log_cb(f"different: {p}")
+        self._finish_task(0)
 
     def _scan_path_for_tasks(self, root: Path) -> List[Task]:
         tasks: List[Task] = []
