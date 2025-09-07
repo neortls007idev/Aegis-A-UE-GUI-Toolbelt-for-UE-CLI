@@ -1,12 +1,9 @@
 from pathlib import Path
-import sys
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from aegis.modules.ubt import Ubt
 
 
-def test_build_argv_includes_clean_and_project(tmp_path):
+def test_build_argv_includes_clean_and_project(tmp_path: Path) -> None:
     engine_root = tmp_path / "UE"
     (engine_root / "Engine/Build/BatchFiles").mkdir(parents=True)
     project_dir = tmp_path / "MyGame"
@@ -23,7 +20,7 @@ def test_build_argv_includes_clean_and_project(tmp_path):
     assert f"-Project={project_dir / 'MyGame.uproject'}" in argv
 
 
-def test_engine_path_direct(tmp_path):
+def test_engine_path_direct(tmp_path: Path) -> None:
     engine_root = tmp_path / "UE"
     (engine_root / "Engine/Build/BatchFiles").mkdir(parents=True)
     project_dir = tmp_path / "MyGame"
@@ -34,7 +31,7 @@ def test_engine_path_direct(tmp_path):
     assert argv[0] == str(engine_root / "Engine/Build/BatchFiles/Build.sh")
 
 
-def test_exe_path(tmp_path):
+def test_exe_path(tmp_path: Path) -> None:
     engine_root = tmp_path / "UE"
     (engine_root / "Engine/Build/BatchFiles").mkdir(parents=True)
     project_dir = tmp_path / "MyGame"

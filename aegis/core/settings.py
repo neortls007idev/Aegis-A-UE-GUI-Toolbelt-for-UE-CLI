@@ -1,3 +1,5 @@
+"""Convenience wrapper around :class:`QSettings` for app-wide state."""
+
 from PySide6.QtCore import QByteArray, QSettings
 
 from aegis.core.key_bindings import KeyBindings

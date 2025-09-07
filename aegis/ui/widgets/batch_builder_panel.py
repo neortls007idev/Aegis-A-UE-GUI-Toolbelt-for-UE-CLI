@@ -1,8 +1,13 @@
+"""Panel for constructing and running batches of build tasks.
+
+Handles queueing, profile integration, and delegates BuildCookRun overrides
+to :class:`UatOverrideWidget`.
+"""
+
 from __future__ import annotations
 
 import sys
 import shlex
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Set
 import shutil
@@ -18,20 +23,17 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QProgressBar,
-    QAbstractItemView,
-    QTableWidget,
-    QTableWidgetItem,
-    QDialog,
+    QCheckBox,
+    QGroupBox,
 )
 
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.modules.ubt import Ubt
 from aegis.modules.uat import Uat
-from aegis.ui.widgets.manual_override_dialog import (
-    ManualOverrideDialog,
-    BUILD_COOK_RUN_SWITCHES,
-)
+from aegis.ui.widgets.uat_override_widget import UatOverrideWidget
+from aegis.ui.widgets.task_queue_widget import TaskQueueWidget
+from aegis.ui.models.queued_task import QueuedTask
 
 
 # Include server and editor configurations by default
@@ -54,16 +56,18 @@ DEFAULT_CONFIGS = [
 # Mac is included for editor builds
 DEFAULT_PLATFORMS = ["Win64", "Linux", "Mac", "Android"]
 
-
-@dataclass
-class QueuedTask:
-    tag: str
-    config: str
-    platform: str
-    item: QListWidgetItem
-    widget: QWidget
-    bar: QProgressBar
-    clean: bool = False
+# Tasks that support manual command editing
+EDITABLE_TAGS = {
+    "build",
+    "clean",
+    "rebuild",
+    "cook",
+    "stage",
+    "package",
+    "ddc-build",
+    "ddc-clean",
+    "ddc-rebuild",
+}
 
 
 class BatchBuilderPanel(QWidget):
@@ -72,6 +76,7 @@ class BatchBuilderPanel(QWidget):
     batch_started = Signal(int)
     batch_progress = Signal(int)
     batch_finished = Signal()
+    tasks_changed = Signal()
 
     def __init__(
         self,
@@ -86,7 +91,6 @@ class BatchBuilderPanel(QWidget):
         self.ubt: Ubt | None = None
         self.uat: Uat | None = None
 
-        self.tasks: list[QueuedTask] = []
         self.current_index = -1
         self.cancel_requested = False
 
@@ -130,21 +134,11 @@ class BatchBuilderPanel(QWidget):
         layout.addLayout(plat_layout)
 
         # ----- Overrides -----
-        over_layout = QVBoxLayout()
-        over_layout.addWidget(QLabel("Manual Overrides"))
-        self.override_table = QTableWidget(0, 2)
-        self.override_table.setHorizontalHeaderLabels(["Switch", "Value"])
-        self.override_table.horizontalHeader().setStretchLastSection(True)
-        over_layout.addWidget(self.override_table)
-        row = QHBoxLayout()
-        btn_add_override = QPushButton("Add…")
-        btn_add_override.clicked.connect(self._add_override)
-        btn_remove_override = QPushButton("Remove")
-        btn_remove_override.clicked.connect(self._remove_override)
-        row.addWidget(btn_add_override)
-        row.addWidget(btn_remove_override)
-        over_layout.addLayout(row)
-        layout.addLayout(over_layout)
+        over_group = QGroupBox("Manual Overrides")
+        over_layout = QVBoxLayout(over_group)
+        self.uat_overrides = UatOverrideWidget()
+        over_layout.addWidget(self.uat_overrides)
+        layout.addWidget(over_group)
 
         # ----- Actions -----
         act_layout = QVBoxLayout()
@@ -174,26 +168,11 @@ class BatchBuilderPanel(QWidget):
         layout.addLayout(act_layout)
 
         # ----- Queue -----
-        queue_layout = QVBoxLayout()
-        queue_layout.addWidget(QLabel("Queued Tasks"))
-        self.task_list = QListWidget()
-        self.task_list.setSelectionMode(QAbstractItemView.SingleSelection)
-        queue_layout.addWidget(self.task_list)
-        row = QHBoxLayout()
-        btn_up = QPushButton("Up")
-        btn_down = QPushButton("Down")
-        btn_remove = QPushButton("Remove")
-        btn_start = QPushButton("Start")
-        btn_cancel = QPushButton("Cancel")
-        btn_up.clicked.connect(lambda: self._move_task(-1))
-        btn_down.clicked.connect(lambda: self._move_task(1))
-        btn_remove.clicked.connect(self._remove_task)
-        btn_start.clicked.connect(self._start_batch)
-        btn_cancel.clicked.connect(self.cancel_batch)
-        for b in (btn_up, btn_down, btn_remove, btn_start, btn_cancel):
-            row.addWidget(b)
-        queue_layout.addLayout(row)
-        layout.addLayout(queue_layout)
+        self.queue = TaskQueueWidget(self._argv_for)
+        self.queue.start_requested.connect(self._start_batch)
+        self.queue.cancel_requested.connect(self.cancel_batch)
+        self.queue.tasks_changed.connect(self.tasks_changed)
+        layout.addWidget(self.queue)
 
     # ----- Profile -----
     def update_profile(self, profile: Profile | None) -> None:
@@ -202,7 +181,7 @@ class BatchBuilderPanel(QWidget):
         self.uat = Uat(profile.engine_root, profile.project_dir) if profile else None
         self.config_list.clear()
         self.platform_list.clear()
-        self.override_table.setRowCount(0)
+        self.uat_overrides.clear()
         if not profile:
             cfgs = DEFAULT_CONFIGS
             plats = DEFAULT_PLATFORMS
@@ -212,11 +191,17 @@ class BatchBuilderPanel(QWidget):
             cfgs = profile.build_configs or DEFAULT_CONFIGS
             plats = profile.build_platforms or DEFAULT_PLATFORMS
             try:
-                self.ubt_label.setText(f"UBT: {self.ubt.exe()}")
+                if self.ubt:
+                    self.ubt_label.setText(f"UBT: {self.ubt.exe()}")
+                else:
+                    raise RuntimeError("UBT not found")
             except Exception:
                 self.ubt_label.setText("UBT: (not found)")
             try:
-                self.uat_label.setText(f"UAT: {self.uat.exe()}")
+                if self.uat:
+                    self.uat_label.setText(f"UAT: {self.uat.exe()}")
+                else:
+                    raise RuntimeError("UAT not found")
             except Exception:
                 self.uat_label.setText("UAT: (not found)")
         for c in cfgs:
@@ -250,41 +235,6 @@ class BatchBuilderPanel(QWidget):
         return [
             self.platform_list.item(i).text() for i in range(self.platform_list.count())
         ]
-
-    def _add_override(self) -> None:
-        dialog = ManualOverrideDialog(self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        for switch, value in dialog.selected_overrides():
-            row = self.override_table.rowCount()
-            self.override_table.insertRow(row)
-            self.override_table.setItem(row, 0, QTableWidgetItem(switch))
-            self.override_table.setItem(row, 1, QTableWidgetItem(value))
-            hint = BUILD_COOK_RUN_SWITCHES.get(switch, "")
-            self.override_table.item(row, 0).setToolTip(hint)
-            self.override_table.item(row, 1).setToolTip(hint)
-
-    def _remove_override(self) -> None:
-        row = self.override_table.currentRow()
-        if row != -1:
-            self.override_table.removeRow(row)
-
-    def _manual_override_args(self) -> list[str]:
-        args: list[str] = []
-        for row in range(self.override_table.rowCount()):
-            key_item = self.override_table.item(row, 0)
-            if not key_item:
-                continue
-            switch = key_item.text().strip()
-            val_item = self.override_table.item(row, 1)
-            value = val_item.text().strip() if val_item else ""
-            if not switch:
-                continue
-            if value:
-                args.append(f"{switch}={value}")
-            else:
-                args.append(switch)
-        return args
 
     def _allowed_platforms_for_config(self, cfg: str) -> Optional[Set[str]]:
         if cfg.endswith("Editor"):
@@ -329,61 +279,79 @@ class BatchBuilderPanel(QWidget):
             clean = mode == "Clean"
         widget = QWidget()
         row = QHBoxLayout(widget)
+        edit_chk = QCheckBox("Edit")
+        edit_chk.setAutoExclusive(False)
+        edit_chk.setTristate(False)
+        if tag not in EDITABLE_TAGS:
+            edit_chk.setEnabled(False)
+            edit_chk.setToolTip("Manual edit not available")
+        else:
+            edit_chk.setToolTip("Edit command before running")
+        row.addWidget(edit_chk)
         label = f"{tag} {cfg_item.text()} {plat_item.text()}"
         if clean:
             label += " (clean)"
-        row.addWidget(QLabel(label))
+        lbl = QLabel(label)
+        if tag not in EDITABLE_TAGS:
+            lbl.setEnabled(False)
+        row.addWidget(lbl)
         bar = QProgressBar()
         bar.setRange(0, 1)
         bar.setValue(0)
         row.addWidget(bar)
         item = QListWidgetItem()
-        item.setSizeHint(widget.sizeHint())
-        self.task_list.addItem(item)
-        self.task_list.setItemWidget(item, widget)
         task = QueuedTask(
-            tag, cfg_item.text(), plat_item.text(), item, widget, bar, clean
+            tag, cfg_item.text(), plat_item.text(), item, widget, bar, edit_chk, clean
         )
         try:
-            preview_argv = self._argv_for(task, preview=True)
-            item.setToolTip(" ".join(shlex.quote(a) for a in preview_argv))
+            self.queue.add_task(task)
         except Exception as e:
             self.log(f"[{tag}] {e}", "error")
-            self.task_list.takeItem(self.task_list.row(item))
             return
-        self.tasks.append(task)
 
-    def _move_task(self, delta: int) -> None:
-        row = self.task_list.currentRow()
-        if row == -1 or row <= self.current_index:
-            return
-        new_row = row + delta
-        if (
-            new_row <= self.current_index
-            or new_row >= self.task_list.count()
-            or new_row < 0
-        ):
-            return
-        task = self.tasks.pop(row)
-        self.tasks.insert(new_row, task)
-        item = self.task_list.takeItem(row)
-        self.task_list.insertItem(new_row, item)
-        self.task_list.setItemWidget(item, task.widget)
-        self.task_list.setCurrentRow(new_row)
+    def command_preview(self, row: int) -> str:
+        return self.queue.command_preview(row)
 
-    def _remove_task(self) -> None:
-        row = self.task_list.currentRow()
-        if row == -1 or row <= self.current_index:
-            return
-        self.tasks.pop(row)
-        self.task_list.takeItem(row)
+    def set_command_override(
+        self, row: int, cmd: str | None, *, emit: bool = True
+    ) -> None:
+        self.queue.set_command_override(row, cmd, emit=emit)
+
+    def task_is_editable(self, row: int) -> bool:
+        return self.queue.task_is_editable(row)
+
+    def all_command_previews(self) -> list[str]:
+        return self.queue.all_command_previews()
 
     def _start_batch(self) -> None:
-        if self.current_index != -1 or not self.tasks:
+        if self.current_index != -1 or not self.queue.tasks:
             return
+        for task in self.queue.tasks:
+            if task.edit.isChecked() and task.tag in EDITABLE_TAGS:
+                try:
+                    preview_argv = self._argv_for(task, preview=True)
+                    default_cmd = task.cmd_override or " ".join(
+                        shlex.quote(a) for a in preview_argv
+                    )
+                except Exception as e:
+                    self.log(f"[{task.tag}] {e}", "error")
+                    return
+                cmd, ok = QInputDialog.getMultiLineText(
+                    self, "Edit Command", "Command:", default_cmd
+                )
+                if not ok:
+                    return
+                task.cmd_override = cmd.strip() or None
+                if task.cmd_override:
+                    task.item.setToolTip(task.cmd_override)
+                else:
+                    task.item.setToolTip(default_cmd)
+            task.edit.setChecked(False)
+        self.queue.tasks_changed.emit()
         self.current_index = -1
         self.cancel_requested = False
-        self.batch_started.emit(len(self.tasks))
+        self.batch_started.emit(len(self.queue.tasks))
+        self.queue.set_current_index(self.current_index)
         self._run_next_task()
 
     def cancel_batch(self) -> None:
@@ -394,32 +362,31 @@ class BatchBuilderPanel(QWidget):
 
     def _run_next_task(self) -> None:
         self.current_index += 1
-        if self.current_index >= len(self.tasks):
+        if self.current_index >= len(self.queue.tasks):
             self.current_index = -1
+            self.queue.set_current_index(self.current_index)
             self.batch_finished.emit()
             return
-        task = self.tasks[self.current_index]
+        self.queue.set_current_index(self.current_index)
+        task = self.queue.tasks[self.current_index]
         task.bar.setRange(0, 0)
-        try:
-            argv = self._argv_for(task)
-        except Exception as e:
-            self.log(f"[{task.tag}] {e}", "error")
-            self._task_done(task, -1)
-            return
-        cmd_str = " ".join(shlex.quote(a) for a in argv)
-        cmd_str, ok = QInputDialog.getText(
-            self, "Edit Command", "Command:", text=cmd_str
-        )
-        if not ok:
-            self._task_done(task, -1)
-            return
-        try:
-            argv = shlex.split(cmd_str)
-        except ValueError as e:
-            self.log(f"[{task.tag}] {e}", "error")
-            self._task_done(task, -1)
-            return
-        self.log(f"[batch] {' '.join(shlex.quote(a) for a in argv)}", "info")
+        if task.cmd_override:
+            cmd_str = task.cmd_override
+            try:
+                argv = shlex.split(cmd_str)
+            except ValueError as e:
+                self.log(f"[{task.tag}] {e}", "error")
+                self._task_done(task, -1)
+                return
+        else:
+            try:
+                argv = self._argv_for(task)
+            except Exception as e:
+                self.log(f"[{task.tag}] {e}", "error")
+                self._task_done(task, -1)
+                return
+            cmd_str = " ".join(shlex.quote(a) for a in argv)
+        self.log(f"[batch] {cmd_str}", "info")
         try:
             self.runner.start(
                 argv,
@@ -449,7 +416,7 @@ class BatchBuilderPanel(QWidget):
                 cook=True,
                 skip_build=True,
             )
-            argv += self._manual_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "stage":
             if task.clean and not preview:
@@ -462,7 +429,7 @@ class BatchBuilderPanel(QWidget):
                 skip_build=True,
                 skip_cook=True,
             )
-            argv += self._manual_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "package":
             if task.clean and not preview:
@@ -476,19 +443,19 @@ class BatchBuilderPanel(QWidget):
                 skip_cook=True,
                 skip_stage=True,
             )
-            argv += self._manual_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "ddc-build":
             argv = self.uat.build_ddc_argv(task.platform)
-            argv += self._manual_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "ddc-clean":
             argv = self.uat.build_ddc_argv(task.platform, clean=True)
-            argv += self._manual_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         if task.tag == "ddc-rebuild":
             argv = self.uat.rebuild_ddc_argv(task.platform)
-            argv += self._manual_override_args()
+            argv += self.uat_overrides.manual_args()
             return argv
         return [
             sys.executable,
@@ -508,6 +475,7 @@ class BatchBuilderPanel(QWidget):
         self.batch_progress.emit(self.current_index + 1)
         if self.cancel_requested:
             self.current_index = -1
+            self.queue.set_current_index(self.current_index)
             self.batch_finished.emit()
         else:
             self._run_next_task()

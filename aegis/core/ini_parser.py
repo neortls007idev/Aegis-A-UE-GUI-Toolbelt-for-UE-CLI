@@ -35,9 +35,9 @@ def parse_ini(path: Path) -> IniData:
         prefix = ""
         if line[0] in "+-!.":
             prefix, line = line[0], line[1:]
-        key, sep, value = line.partition("=")
+        key, sep, raw_value = line.partition("=")
         key = key.strip()
-        value = value.strip() if sep else None
+        value: str | None = raw_value.strip() if sep else None
         sec = data.setdefault(section, {})
         existing = sec.get(key)
         if prefix == "+":

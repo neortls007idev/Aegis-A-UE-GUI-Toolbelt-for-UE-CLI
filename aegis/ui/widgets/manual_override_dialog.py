@@ -4,14 +4,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QHeaderView,
     QLineEdit,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
-
-from aegis.ui.widgets.tooltip_icon import TooltipIcon
 
 
 BUILD_COOK_RUN_SWITCHES: dict[str, str] = {
@@ -237,7 +236,14 @@ class ManualOverrideDialog(QDialog):
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Use", "Switch", "Description", "Value"])
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setWordWrap(True)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        fm = self.table.fontMetrics()
+        self.table.verticalHeader().setDefaultSectionSize(fm.lineSpacing() * 3)
         layout.addWidget(self.table)
 
         for row, switch in enumerate(sorted(BUILD_COOK_RUN_SWITCHES)):
@@ -246,12 +252,15 @@ class ManualOverrideDialog(QDialog):
             chk = QCheckBox()
             self.table.setCellWidget(row, 0, chk)
             self.table.setItem(row, 1, QTableWidgetItem(switch))
-            tip = TooltipIcon(hint)
-            self.table.setCellWidget(row, 2, tip)
+            desc_item = QTableWidgetItem(hint)
+            desc_item.setToolTip(hint)
+            self.table.setItem(row, 2, desc_item)
             val = QLineEdit()
             val.setToolTip(hint)
             self.table.setCellWidget(row, 3, val)
 
+        self.table.resizeColumnsToContents()
+        self.resize(1100, 700)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

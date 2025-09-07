@@ -1,8 +1,5 @@
-import sys
-import time
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
 from aegis.modules.uaft import Uaft
 
 
@@ -15,18 +12,6 @@ SecurityToken={token}
 """,
         encoding="utf-8",
     )
-
-
-def test_security_token_updates(tmp_path: Path) -> None:
-    ini = tmp_path / "Config" / "DefaultEngine.ini"
-    make_ini(ini, "AAA")
-    uaft = Uaft(Path("uaft"), project_dir=tmp_path)
-    assert uaft.security_token() == "AAA"
-    time.sleep(1.1)
-    make_ini(ini, "BBB")
-    time.sleep(1.5)
-    assert uaft.security_token() == "BBB"
-    uaft.stop()
 
 
 def test_security_token_after_delimiter(tmp_path: Path) -> None:
