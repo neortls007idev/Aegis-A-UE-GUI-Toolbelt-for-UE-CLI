@@ -1,3 +1,5 @@
+from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 import sys
 
@@ -7,6 +9,10 @@ from aegis.ui.main_window import MainWindow
 
 def main() -> None:
     """Launch the Aegis Toolbelt application."""
+    QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     app = QApplication(sys.argv)
     w = MainWindow()
     if preferences.launch_maximized:
