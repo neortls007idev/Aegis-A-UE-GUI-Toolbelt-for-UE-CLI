@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable, List
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,15 +17,17 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
-    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from aegis.core.task_runner import TaskRunner
 from aegis.core.profile import Profile
 from aegis.modules.gauntlet import Gauntlet
+from aegis.ui.models.build_defaults import DEFAULT_CONFIGS, DEFAULT_PLATFORMS
+from aegis.ui.widgets.device_list_widget import DeviceListWidget
 
 
 class GauntletPanel(QWidget):
@@ -41,21 +44,19 @@ class GauntletPanel(QWidget):
         self.log = log_cb
 
         # Paths
-        self.runuat_edit = QLineEdit()
-        self.runuat_edit.setObjectName("runuat_edit")
-        self.runuat_btn = QPushButton("Browse…")
-        self.runuat_btn.setObjectName("runuat_btn")
-        self.runuat_btn.clicked.connect(self._pick_runuat)
+        self.runuat_label = QLabel("RunUAT: (not found)")
+        self.runuat_label.setObjectName("runuat_lbl")
+        self.runuat_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.runuat_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
-        self.project_edit = QLineEdit()
-        self.project_edit.setObjectName("project_edit")
-        self.project_btn = QPushButton("Browse…")
-        self.project_btn.clicked.connect(self._pick_project)
+        self.editor_label = QLabel("UnrealEditor-Cmd: (not found)")
+        self.editor_label.setObjectName("editor_lbl")
+        self.editor_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.editor_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
-        self.editor_edit = QLineEdit()
-        self.editor_edit.setObjectName("editor_edit")
-        self.editor_btn = QPushButton("Browse…")
-        self.editor_btn.clicked.connect(self._pick_editor)
+        self.project_path: Path | None = None
+        self.runuat_path: Path | None = None
+        self.editor_path: Path | None = None
 
         # Scenario
         self.tests_edit = QLineEdit()
@@ -65,13 +66,9 @@ class GauntletPanel(QWidget):
         self.clients_spin.setValue(1)
         self.server_chk = QCheckBox("Run Server")
         self.platform_combo = QComboBox()
-        self.platform_combo.addItems(["Windows", "Android"])
         self.config_combo = QComboBox()
-        self.config_combo.addItems(["Development", "Shipping"])
         self.map_edit = QLineEdit()
-        self.devices_edit = QLineEdit()
-        self.devices_edit.setObjectName("devices_edit")
-        self.devices_edit.setPlaceholderText("adb1234,adb5678")
+        self.device_panel = DeviceListWidget(runner, log_cb)
         self.timeout_spin = QSpinBox()
         self.timeout_spin.setRange(1, 1000)
         self.timeout_spin.setValue(60)
@@ -93,8 +90,6 @@ class GauntletPanel(QWidget):
         # Command + log
         self.preview = QTextEdit()
         self.preview.setReadOnly(True)
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
 
         self.dry_run_btn = QPushButton("Dry Run")
         self.dry_run_btn.clicked.connect(self._dry_run)
@@ -103,19 +98,35 @@ class GauntletPanel(QWidget):
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.clicked.connect(self.runner.cancel)
 
+        self._populate_build_options(None)
         self._build_layout()
 
     # ----- UI helpers -----
+    def _populate_build_options(self, profile: Profile | None) -> None:
+        plats = (
+            profile.build_platforms
+            if profile and profile.build_platforms
+            else DEFAULT_PLATFORMS
+        )
+        cfgs = (
+            profile.build_configs
+            if profile and profile.build_configs
+            else DEFAULT_CONFIGS
+        )
+        self.platform_combo.clear()
+        self.platform_combo.addItems(plats)
+        self.config_combo.clear()
+        self.config_combo.addItems(cfgs)
+
     def _build_layout(self) -> None:
         root = QVBoxLayout(self)
 
         paths = QGroupBox("Paths")
-        lp = QVBoxLayout(paths)
-        lp.addLayout(self._row(QLabel("RunUAT"), self.runuat_edit, self.runuat_btn))
-        lp.addLayout(
-            self._row(QLabel("UnrealEditor-Cmd"), self.editor_edit, self.editor_btn)
-        )
-        lp.addLayout(self._row(QLabel("Project"), self.project_edit, self.project_btn))
+        lp = QHBoxLayout(paths)
+        lp.addWidget(self.runuat_label)
+        lp.addSpacing(8)
+        lp.addWidget(self.editor_label)
+        lp.addStretch(1)
         root.addWidget(paths)
 
         scen = QGroupBox("Scenario")
@@ -131,7 +142,8 @@ class GauntletPanel(QWidget):
             )
         )
         ls.addLayout(self._row(QLabel("Map"), self.map_edit))
-        ls.addLayout(self._row(QLabel("Devices"), self.devices_edit))
+        ls.addLayout(self._row(self.device_panel.list_btn))
+        ls.addWidget(self.device_panel)
         ls.addLayout(self._row(QLabel("Timeout"), self.timeout_spin))
         root.addWidget(scen)
 
@@ -162,10 +174,7 @@ class GauntletPanel(QWidget):
         ctrl.addStretch(1)
         root.addLayout(ctrl)
 
-        tabs = QTabWidget()
-        tabs.addTab(self.preview, "Preview")
-        tabs.addTab(self.log_view, "Log")
-        root.addWidget(tabs, 1)
+        root.addWidget(self.preview, 1)
 
     def _row(self, *widgets) -> QHBoxLayout:
         layout = QHBoxLayout()
@@ -176,23 +185,6 @@ class GauntletPanel(QWidget):
         return layout
 
     # ----- File pickers -----
-    def _pick_runuat(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select RunUAT")
-        if path:
-            self.runuat_edit.setText(path)
-
-    def _pick_project(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select .uproject", filter="*.uproject"
-        )
-        if path:
-            self.project_edit.setText(path)
-
-    def _pick_editor(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select UnrealEditor-Cmd")
-        if path:
-            self.editor_edit.setText(path)
-
     def _pick_artifacts(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Select artifacts root")
         if path:
@@ -200,10 +192,18 @@ class GauntletPanel(QWidget):
 
     # ----- Profile -----
     def update_profile(self, profile: Profile | None) -> None:
+        self._populate_build_options(profile)
+        self.device_panel.update_profile(profile)
         if not profile:
+            self.runuat_label.setText("RunUAT: (not found)")
+            self.editor_label.setText("UnrealEditor-Cmd: (not found)")
+            self.project_path = None
+            self.runuat_path = None
+            self.editor_path = None
             return
         runuat = profile.engine_root / "Engine" / "Build" / "BatchFiles" / "RunUAT.bat"
-        self.runuat_edit.setText(str(runuat))
+        self.runuat_label.setText(f"RunUAT: {runuat}")
+        self.runuat_path = runuat
         editor = (
             profile.engine_root
             / "Engine"
@@ -211,9 +211,11 @@ class GauntletPanel(QWidget):
             / "Win64"
             / "UnrealEditor-Cmd.exe"
         )
-        self.editor_edit.setText(str(editor))
+        self.editor_label.setText(f"UnrealEditor-Cmd: {editor}")
+        self.editor_path = editor
+        self.project_path = None
         for uproj in profile.project_dir.glob("*.uproject"):
-            self.project_edit.setText(str(uproj))
+            self.project_path = uproj
             break
         self._dry_run()
 
@@ -221,7 +223,7 @@ class GauntletPanel(QWidget):
     def _gauntlet(self) -> Gauntlet:
         tests = [t.strip() for t in self.tests_edit.text().split(",") if t.strip()]
         devices: List[str] = []
-        for dev in self._device_list():
+        for dev in self.device_panel.selected_devices():
             if self.platform_combo.currentText() == "Android":
                 devices.append(f"Android@{dev}")
             else:
@@ -240,15 +242,13 @@ class GauntletPanel(QWidget):
             int(self.trace_port.text()) if self.insights_chk.isChecked() else None
         )
         return Gauntlet(
-            runuat=Path(self.runuat_edit.text()),
-            project=Path(self.project_edit.text()),
+            runuat=self.runuat_path or Path(),
+            project=self.project_path or Path(),
             tests=tests,
             platforms=[self.platform_combo.currentText()],
             configuration=self.config_combo.currentText(),
             devices=devices,
-            editor_exe=(
-                Path(self.editor_edit.text()) if self.editor_edit.text() else None
-            ),
+            editor_exe=self.editor_path,
             timeout_minutes=int(self.timeout_spin.value()),
             exec_cmds=";".join(cmds),
             trace_categories=trace_cats,
@@ -266,7 +266,6 @@ class GauntletPanel(QWidget):
     def _run(self) -> None:
         argv = self._compose()
         self.preview.setPlainText("\n".join(argv))
-        self.log_view.clear()
 
         def on_exit(code: int) -> None:
             self._append_log(f"Exit code {code}", "exit")
@@ -274,7 +273,7 @@ class GauntletPanel(QWidget):
                 self.logcat_chk.isChecked()
                 and self.platform_combo.currentText() == "Android"
             ):
-                for dev in self._device_list():
+                for dev in self.device_panel.selected_devices():
                     self._pull_logcat(dev)
 
         self.runner.start(
@@ -286,10 +285,6 @@ class GauntletPanel(QWidget):
 
     def _append_log(self, line: str, stream: str) -> None:
         self.log(stream, line)
-        self.log_view.append(f"[{stream}] {line}")
-
-    def _device_list(self) -> List[str]:
-        return [d.strip() for d in self.devices_edit.text().split(",") if d.strip()]
 
     def _pull_logcat(self, device: str) -> None:
         art = Path(self.artifacts_edit.text()) / "devices" / device

@@ -28,7 +28,7 @@ def test_buildgraph_panel_autofills(tmp_path: Path, qtbot) -> None:
     panel = BuildGraphPanel(TaskRunner(), _noop_log)
     qtbot.addWidget(panel)
     panel.update_profile(profile)
-    assert panel.runuat_edit.text() == str(batch_dir / "RunUAT.bat")
+    assert panel.runuat_path == batch_dir / "RunUAT.bat"
     proj_edit = panel.vars_edits.get("Project")
     assert proj_edit is not None
     assert proj_edit.text() == str(uproj)

@@ -21,8 +21,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -32,6 +30,7 @@ from PySide6.QtWidgets import (
 from aegis.core.profile import Profile
 from aegis.core.task_runner import TaskRunner
 from aegis.modules.uaft import Uaft
+from aegis.ui.widgets.device_list_widget import DeviceListWidget
 
 
 DEFAULT_CMD_FILE = Path(__file__).resolve().parents[3] / "UECommandline.txt"
@@ -85,16 +84,14 @@ class UaftPanel(QWidget):
         self.package = QLineEdit()
         self.package.setPlaceholderText("e.g. com.company.game")
 
-        self.btn_list_devices = QPushButton("List Devices")
+        self.device_panel = DeviceListWidget(runner, log_cb)
+        self.device_panel.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.device_panel.table.setMinimumHeight(160)
+        self.device_panel.table.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )
+        self.device_panel.table.itemSelectionChanged.connect(self._device_selected)
         self.btn_list_packages = QPushButton("List Packages")
-
-        self.device_table = QTableWidget(0, 3)
-        self.device_table.setHorizontalHeaderLabels(["Make", "Model", "Serial"])
-        self.device_table.horizontalHeader().setStretchLastSection(True)
-        self.device_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.device_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.device_table.setMinimumHeight(160)
-        self.device_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.pkg_list = QListWidget()
         self.pkg_list.setSelectionMode(QListWidget.SingleSelection)
@@ -175,9 +172,9 @@ class UaftPanel(QWidget):
                 ]
             )
         )
-        lc.addLayout(self._row([self.btn_list_devices, self.btn_list_packages]))
+        lc.addLayout(self._row([self.device_panel.list_btn, self.btn_list_packages]))
         dev_pkg = QHBoxLayout()
-        dev_pkg.addWidget(self.device_table, 1)
+        dev_pkg.addWidget(self.device_panel, 1)
         dev_pkg.addWidget(self.pkg_list, 1)
         lc.addLayout(dev_pkg)
         box_conn.setLayout(lc)
@@ -219,9 +216,7 @@ class UaftPanel(QWidget):
         return h
 
     def _connect_signals(self) -> None:
-        self.btn_list_devices.clicked.connect(self._list_devices)
         self.btn_list_packages.clicked.connect(self._list_packages)
-        self.device_table.itemSelectionChanged.connect(self._device_selected)
         self.pkg_list.itemClicked.connect(lambda it: self.package.setText(it.text()))
         self.btn_write_cmd.clicked.connect(self._write_cmd)
         self.btn_refresh_traces.clicked.connect(self._refresh_traces)
@@ -232,6 +227,7 @@ class UaftPanel(QWidget):
     # ----- Profile -----
     def update_profile(self, profile: Optional[Profile]) -> None:
         self.profile = profile
+        self.device_panel.update_profile(profile)
         self._scan()
         self._apply_project_prefix()
         self._load_security_token()
@@ -309,68 +305,15 @@ class UaftPanel(QWidget):
         shown = ["<redacted>" if token and a == token else a for a in argv]
         self.log(f"[uaft] {' '.join(shown)}", "info")
 
-    def _adb_device_info(self, serial: str) -> tuple[str, str]:
-        try:
-            make = subprocess.run(
-                ["adb", "-s", serial, "shell", "getprop", "ro.product.manufacturer"],
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout.strip()
-            model = subprocess.run(
-                ["adb", "-s", serial, "shell", "getprop", "ro.product.model"],
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout.strip()
-            return make or "?", model or serial
-        except Exception:
-            return "?", serial
-
     # ----- Actions -----
-    def _list_devices(self) -> None:
-        uaft = self._require_uaft()
-        if not uaft:
-            return
-        lines: list[str] = []
-        argv = uaft.devices_argv()
-        self.log(f"[uaft] {' '.join(argv)}", "info")
-        try:
-            self.runner.start(
-                argv,
-                on_stdout=lines.append,
-                on_stderr=lambda s: self.log(f"[uaft] {s}", "error"),
-                on_exit=lambda code: self._on_devices_exit(code, lines),
-            )
-        except Exception as e:  # pragma: no cover - subprocess failures
-            self.log(f"[uaft] {e}", "error")
-
-    def _on_devices_exit(self, code: int, lines: list[str]) -> None:
-        if code != 0:
-            self.log(f"[uaft] exit code {code}", "error")
-            return
-        devs = Uaft.parse_devices(lines)
-        self.device_table.setRowCount(0)
-        for serial in devs:
-            make, model = self._adb_device_info(serial)
-            row = self.device_table.rowCount()
-            self.device_table.insertRow(row)
-            self.device_table.setItem(row, 0, QTableWidgetItem(make))
-            self.device_table.setItem(row, 1, QTableWidgetItem(model))
-            self.device_table.setItem(row, 2, QTableWidgetItem(serial))
-        if devs:
-            self.device_table.selectRow(0)
-            self.serial.setText(devs[0])
-            self._device_selected()
-        self.log(f"[uaft] found {len(devs)} device(s)", "info")
-
     def _device_selected(self) -> None:
-        row = self.device_table.currentRow()
+        table = self.device_panel.table
+        row = table.currentRow()
         if row >= 0:
-            serial = self.device_table.item(row, 2).text()
+            serial = table.item(row, 2).text()
             self.serial.setText(serial)
-            make = self.device_table.item(row, 0).text()
-            model = self.device_table.item(row, 1).text()
+            make = table.item(row, 0).text()
+            model = table.item(row, 1).text()
             if self.pull_base and self.chk_auto_path.isChecked():
                 make_safe = make.replace(" ", "_")
                 model_safe = model.replace(" ", "_")

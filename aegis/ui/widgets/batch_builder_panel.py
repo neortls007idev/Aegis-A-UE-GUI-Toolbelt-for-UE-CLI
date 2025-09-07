@@ -34,27 +34,7 @@ from aegis.modules.uat import Uat
 from aegis.ui.widgets.uat_override_widget import UatOverrideWidget
 from aegis.ui.widgets.task_queue_widget import TaskQueueWidget
 from aegis.ui.models.queued_task import QueuedTask
-
-
-# Include server and editor configurations by default
-DEFAULT_CONFIGS = [
-    "Debug",
-    "DebugGame",
-    "DebugServer",
-    "DebugEditor",
-    "Development",
-    "DevelopmentServer",
-    "DevelopmentEditor",
-    "Test",
-    "TestServer",
-    "TestEditor",
-    "Shipping",
-    "ShippingServer",
-    "ShippingEditor",
-]
-
-# Mac is included for editor builds
-DEFAULT_PLATFORMS = ["Win64", "Linux", "Mac", "Android"]
+from aegis.ui.models.build_defaults import DEFAULT_CONFIGS, DEFAULT_PLATFORMS
 
 # Tasks that support manual command editing
 EDITABLE_TAGS = {
